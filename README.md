@@ -1,5 +1,6 @@
 # ICR
-code for ICLR 2020
+code for ICLR 2020: Implicit competitive regularization in GANs
+
 quick start: train.ipynb
 
 Further explanation 
