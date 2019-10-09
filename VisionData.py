@@ -514,7 +514,7 @@ def train_mnist():
     G = dc_G(z_dim=z_dim)
     dataset = MNIST('datas/mnist', train=True, transform=transform)
     trainer = GAN_trainer(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=128, lr=learning_rate, show_iter=200,
-                         weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim))
+                         weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim), gp_weight=0)
     # trainer.train_d(epoch_num=100, mode=modes[3], logname='MNIST2', dataname='MNIST')
     # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/backup/epoch21-D1.pth', count=32000, load_d=True, load_g=True)
     # trainer.load_checkpoint('checkpoints/MNIST-0.0001/backup/fixG_D1_Adam-0.00010_55000.pth', count=55000, load_d=True, load_g=True)
