@@ -17,3 +17,18 @@ Further explanation
   - trainer. train_ocgd() to train GAN with one side CGD
     - update_D=True: train discriminator keeping generator fixed 
     - update_D=False: train generator keeping discriminator fixed
+## How to use CGD
+```python
+device = torch.device('cuda:0')
+lr = 0.0001
+G = Generator()
+D = Discriminator()
+optimizer = MCGD(max_params=G, min_params=D, lr=lr, device=device)
+for img in dataloader:
+    d_real = D(img)
+    z = torch.randn((batch_size, z_dim), device=device)
+    d_fake = D(G(z))
+    loss = criterion(d_real, d_fake)
+    optimizer.zero_grad()
+    optimizer.step(loss=loss)
+```
