@@ -14,9 +14,9 @@ from models import DC_generator, DC_discriminator, DC_d, DC_g, DC_discriminatord
 
 import time
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2'
 # modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
-
+gpu_num = 2
 seed = 999
 # seed = torch.randint(0, 1000000, (1,))
 random.seed(seed)
@@ -64,12 +64,12 @@ class CeleA():
               'l2 penalty on generator: %.5f'
               % (self.lr, self.weight_decay, self.d_penalty, self.g_penalty))
         self.dataset = dataset
-        self.dataloader = DataLoader(dataset=self.dataset, batch_size=self.batchsize, shuffle=True, num_workers=3)
+        self.dataloader = DataLoader(dataset=self.dataset, batch_size=self.batchsize, shuffle=True, num_workers=4)
 
         self.D = D.to(self.device)
         self.G = G.to(self.device)
-        # self.D = nn.DataParallel(self.D, list(range(2)))
-        # self.G = nn.DataParallel(self.G, list(range(2)))
+        self.D = nn.DataParallel(self.D, list(range(gpu_num)))
+        self.G = nn.DataParallel(self.G, list(range(gpu_num)))
 
         self.D.apply(weights_init)
         self.G.apply(weights_init)
@@ -217,7 +217,7 @@ class CeleA():
             optimizer = MCGD(max_params=self.G, min_params=self.D, lr=self.lr, device=self.device, solve_x=False,
                              collect_info=collect_info)
         elif mode == 'MACGD':
-            optimizer = MACGD(max_params=self.G, min_params=self.D, beta1=0.5, beta2=0.99, lr=self.lr, device=self.device, solve_x=False,
+            optimizer = MACGD(max_params=self.G, min_params=self.D, beta1=0.9, beta2=0.99, lr=self.lr, device=self.device, solve_x=False,
                              collect_info=collect_info)
         for e in range(epoch_num):
             for real_x in self.dataloader:
@@ -261,8 +261,8 @@ def train_celeba():
     batch_size = 128
     z_dim = 100
     learning_rate = 0.0001
-    Dropout = False
-    dataset = dset.ImageFolder(root=dataroot, transform=transform)
+    Dropout = True
+    dataset = dset.ImageFolder(root=dataroot, transform=tf)
     if Dropout:
         D = DC_discriminatord(channel_num=3, feature_num=64)
         print('Dropout: True')
@@ -271,8 +271,8 @@ def train_celeba():
     G = DC_generator(z_dim=z_dim, channel_num=3, feature_num=64)
     trainer = CeleA(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=batch_size, lr=learning_rate,
                          show_iter=100, weight_decay=0.0, d_penalty=0.001, g_penalty=0, noise_shape=(images_num, z_dim, 1, 1), logname='celeba')
-    # trainer.train_gd(epoch_num=10, mode=modes[3])
-    trainer.train_cgd(epoch_num=25, mode='MCGD', collect_info=True, loss_type='WGAN')
+    # trainer.train_gd(epoch_num=10, mode=modes[4])
+    trainer.train_cgd(epoch_num=25, mode='MCGD', collect_info=True, loss_type='JSD')
 
 
 if __name__ == '__main__':

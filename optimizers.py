@@ -528,7 +528,7 @@ class OCGD(object):
 
 
 class MCGD(object): # allow multi GPU
-    def __init__(self, max_params, min_params, eps=1e-5, beta2=0.99, lr=1e-3, device=torch.device('cpu'),solve_x=False, collect_info=True):
+    def __init__(self, max_params, min_params, eps=1e-8, beta2=0.99, lr=1e-3, device=torch.device('cpu'),solve_x=False, collect_info=True):
         self.max_params = max_params
         self.min_params = min_params
         self.lr = lr
@@ -635,127 +635,6 @@ class MCGD(object): # allow multi GPU
             index += p.numel()
         if index != cg_y.numel():
             raise RuntimeError('CG size mismatch')
-        if self.collect_info:
-            self.norm_gx = torch.norm(grad_x_vec, p=2)
-            self.norm_gy = torch.norm(grad_y_vec, p=2)
-            self.norm_cgx = torch.norm(cg_x, p=2)
-            self.norm_cgy = torch.norm(cg_y, p=2)
-
-        self.solve_x = False if self.solve_x else True
-
-
-class MACGD(object): # Adam + CGD multi GPU
-    def __init__(self, max_params, min_params, eps=1e-5, beta1=0.5, beta2=0.99, lr=1e-3, device=torch.device('cpu'),solve_x=False, collect_info=True):
-        self.max_params = max_params
-        self.min_params = min_params
-        self.lr = lr
-        self.device = device
-        self.solve_x = solve_x
-        self.collect_info = collect_info
-        self.square_avgx = None
-        self.square_avgy = None
-        self.beta1 = beta1
-        self.beta2 = beta2
-        self.eps = eps
-        self.cg_x = None
-        self.cg_y = None
-
-        self.old_x = None
-        self.old_y = None
-
-    def zero_grad(self):
-        zero_grad(self.max_params.parameters())
-        zero_grad(self.min_params.parameters())
-
-    def getinfo(self):
-        if self.collect_info:
-            return self.norm_gx, self.norm_gy, self.norm_px, self.norm_py, self.norm_cgx, self.norm_cgy, \
-                   self.timer, self.iter_num
-        else:
-            raise ValueError('No update information stored. Set get_norms True before call this method')
-
-    def step(self, loss):
-        grad_x = autograd.grad(loss, self.max_params.parameters(), create_graph=True, retain_graph=True)
-        grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
-        grad_y = autograd.grad(loss, self.min_params.parameters(), create_graph=True, retain_graph=True)
-        grad_y_vec = torch.cat([g.contiguous().view(-1) for g in grad_y])
-
-        if self.square_avgx is None and self.square_avgy is None:
-            self.square_avgx = torch.zeros(grad_x_vec.size(), requires_grad=False, device=self.device)
-            self.square_avgy = torch.zeros(grad_y_vec.size(), requires_grad=False, device=self.device)
-        self.square_avgx.mul_(self.beta2).addcmul_(1 - self.beta2, grad_x_vec.data, grad_x_vec.data)
-        self.square_avgy.mul_(self.beta2).addcmul_(1 - self.beta2, grad_y_vec.data, grad_y_vec.data)
-        lr_x = self.lr / self.square_avgx.sqrt().add_(self.eps)
-        lr_y = self.lr / self.square_avgy.sqrt().add_(self.eps)
-
-        scaled_grad_x = torch.mul(lr_x, grad_x_vec).detach() # lr_x * grad_x
-        scaled_grad_y = torch.mul(lr_y, grad_y_vec).detach() # lr_y * grad_y
-        hvp_x_vec = Hvpvec(grad_y_vec, self.max_params, scaled_grad_y, retain_graph=True)  # D_xy * lr_y * grad_y
-        hvp_y_vec = Hvpvec(grad_x_vec, self.min_params, scaled_grad_x, retain_graph=True)  # D_yx * lr_x * grad_x
-
-        p_x = torch.add(grad_x_vec, - hvp_x_vec).detach_() #grad_x - D_xy * lr_y * grad_y
-        p_y = torch.add(grad_y_vec, hvp_y_vec).detach_()   #grad_y + D_yx * lr_x * grad_x
-
-        if self.collect_info:
-            self.norm_px = torch.norm(hvp_x_vec, p=2).detach_()
-            self.norm_py = torch.norm(hvp_y_vec, p=2).detach_()
-            self.timer = time.time()
-        if self.solve_x:
-            p_y.mul_(lr_y.sqrt())
-            p_y_norm = p_y.norm(p=2).detach_()
-            if self.old_y is not None:
-                self.old_y = self.old_y / p_y_norm
-            cg_y, self.iter_num = mgeneral_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                             x_params=self.min_params,
-                                                             y_params=self.max_params, b=p_y / p_y_norm, x=self.old_y,
-                                                             nsteps=p_y.shape[0] // 10000,
-                                                             lr_x=lr_y, lr_y=lr_x, device=self.device)
-            cg_y.mul_(p_y_norm)
-            cg_y.detach_().mul_(- lr_y.sqrt())
-            hcg = Hvpvec(grad_y_vec, self.max_params, cg_y, retain_graph=True).add_(grad_x_vec).detach_()
-            # grad_x + D_xy * delta y
-            cg_x = hcg.mul(lr_x)
-            self.old_x = hcg.mul(lr_x.sqrt())
-        else:
-            p_x.mul_(lr_x.sqrt())
-            p_x_norm = p_x.norm(p=2).detach_()
-            if self.old_x is not None:
-                self.old_x = self.old_x / p_x_norm
-            cg_x, self.iter_num = mgeneral_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                             x_params=self.max_params,
-                                                             y_params=self.min_params, b=p_x / p_x_norm, x=self.old_x,
-                                                             nsteps=p_x.shape[0] // 10000,
-                                                             lr_x=lr_x, lr_y=lr_y, device=self.device)
-            cg_x.mul_(p_x_norm)
-            cg_x.detach_().mul_(lr_x.sqrt()) # delta x = lr_x.sqrt() * cg_x
-            hcg = Hvpvec(grad_x_vec, self.min_params, cg_x, retain_graph=True).add_(grad_y_vec).detach_()
-            # grad_y + D_yx * delta x
-            cg_y = hcg.mul(- lr_y)
-            self.old_y = hcg.mul(lr_y.sqrt())
-
-        if self.collect_info:
-            self.timer = time.time() - self.timer
-        if self.cg_x is None and self.cg_y is None:
-            self.cg_x = cg_x.detach_()
-            self.cg_y = cg_y.detach_()
-        else:
-            self.cg_x = self.cg_x.mul(self.beta1) + cg_x.mul(1 - self.beta1)
-            self.cg_y = self.cg_y.mul(self.beta1) + cg_y.mul(1 - self.beta1)
-
-        index = 0
-        for p in self.max_params.parameters():
-            p.data.add_(self.cg_x[index: index + p.numel()].reshape(p.shape))
-            index += p.numel()
-        if index != self.cg_x.numel():
-            raise RuntimeError('CG size mismatch')
-
-        index = 0
-        for p in self.min_params.parameters():
-            p.data.add_(self.cg_y[index: index + p.numel()].reshape(p.shape))
-            index += p.numel()
-        if index != self.cg_y.numel():
-            raise RuntimeError('CG size mismatch')
-
         if self.collect_info:
             self.norm_gx = torch.norm(grad_x_vec, p=2)
             self.norm_gy = torch.norm(grad_y_vec, p=2)
