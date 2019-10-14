@@ -5,7 +5,7 @@ demo for paper: train.ipynb
     
 ## How to use CGD
 ```python
-from optimizers import MCGD, BCGD
+from optimizers import MCGD
 device = torch.device('cuda:0')
 lr = 0.0001
 G = Generator()
