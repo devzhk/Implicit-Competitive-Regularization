@@ -1,7 +1,7 @@
 <h1 align="center">Implicit competitive regularization in GANs</h1>
 Code for paper: 'Implicit competitive regularization in GANs': https://arxiv.org/abs/1910.05852
 
-Demo for paper: train.ipynb
+Demo for paper: `train.ipynb`
     
 ## How to use CGD
 Copy the `optimizers.py` and `cgd_utils.py`
