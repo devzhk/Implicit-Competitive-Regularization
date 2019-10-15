@@ -1,5 +1,5 @@
 # ICR
-code for ICLR 2020: Implicit competitive regularization in GANs
+code for paper: *Implicit competitive regularization in GANs*: https://arxiv.org/abs/1910.05852
 
 demo for paper: train.ipynb
     
