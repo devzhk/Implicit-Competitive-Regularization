@@ -22,7 +22,7 @@ for img in dataloader:
     optimizer.step(loss=loss)
 ```
 ## Citation
-Please cite the following paper if you found our optimizer useful. Thanks!
+Please cite the following paper if you found this code useful. Thanks!
 ```
 @misc{schfer2019implicit,
     title={Implicit competitive regularization in GANs},
