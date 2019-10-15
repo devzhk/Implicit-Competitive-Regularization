@@ -4,6 +4,7 @@ Code for paper: *Implicit competitive regularization in GANs*: https://arxiv.org
 Demo for paper: train.ipynb
     
 ## How to use CGD
+Copy the `optimizers.py` and `cgd_utils.py`
 ```python
 from optimizers import MCGD
 device = torch.device('cuda:0')
