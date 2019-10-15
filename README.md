@@ -4,7 +4,7 @@ This code contains experiments for paper: 'Implicit competitive regularization i
 
 Quick demo for experiments : `train.ipynb`
     
-## How to use new optimizer(ACGD) in paper
+## How to use new optimizer(ACGD) in our paper
 Copy the `optimizers.py` and `cgd_utils.py`
 ```python
 from optimizers import MCGD
