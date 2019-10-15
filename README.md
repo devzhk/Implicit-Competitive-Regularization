@@ -1,7 +1,7 @@
 # ICR
-code for paper: *Implicit competitive regularization in GANs*: https://arxiv.org/abs/1910.05852
+Code for paper: *Implicit competitive regularization in GANs*: https://arxiv.org/abs/1910.05852
 
-demo for paper: train.ipynb
+Demo for paper: train.ipynb
     
 ## How to use CGD
 ```python
