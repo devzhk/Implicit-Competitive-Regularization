@@ -4,6 +4,7 @@ This code contains experiments for paper: 'Implicit competitive regularization i
 
 Quick demo for experiments : `train.ipynb`
 Repro code for paper: `VisionData.py`, `wgan_gp.py`
+I will keep updating..
 ## How to use new optimizer(ACGD) in our paper
 Copy the `optimizers.py` and `cgd_utils.py`
 ```python
