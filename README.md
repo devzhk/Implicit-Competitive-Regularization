@@ -3,7 +3,7 @@
 This code contains experiments for paper: 'Implicit competitive regularization in GANs': https://arxiv.org/abs/1910.05852
 
 Quick demo for experiments : `train.ipynb`
-    
+Repro code for paper: `VisionData.py`, `wgan_gp.py`
 ## How to use new optimizer(ACGD) in our paper
 Copy the `optimizers.py` and `cgd_utils.py`
 ```python
