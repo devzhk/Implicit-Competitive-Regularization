@@ -1,4 +1,4 @@
-# ICR
+<h1 align="center">Implicit competitive regularization in GANs</h1>
 Code for paper: *Implicit competitive regularization in GANs*: https://arxiv.org/abs/1910.05852
 
 Demo for paper: train.ipynb
@@ -19,4 +19,16 @@ for img in dataloader:
     loss = criterion(d_real, d_fake)
     optimizer.zero_grad()
     optimizer.step(loss=loss)
+```
+## Citation
+Please cite the following paper if you found our optimizer useful. Thanks!
+```
+@misc{schfer2019implicit,
+    title={Implicit competitive regularization in GANs},
+    author={Florian Schäfer and Hongkai Zheng and Anima Anandkumar},
+    year={2019},
+    eprint={1910.05852},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG}
+}
 ```
