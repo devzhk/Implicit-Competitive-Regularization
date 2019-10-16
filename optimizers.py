@@ -1,8 +1,6 @@
 from cgd_utils import conjugate_gradient, Hvp, Hvp_vec, general_conjugate_gradient, Hvpvec, mgeneral_conjugate_gradient
 import torch.autograd as autograd
-import numpy as np
 import torch
-from torch.optim.optimizer import Optimizer, required
 import time
 import math
 
@@ -193,7 +191,7 @@ class OCGD(object):
             self.norm_cgy = 0
 
 
-class ACGD(object): # allow multi GPU
+class ACGD(object): # Support multi GPU
     def __init__(self, max_params, min_params, eps=1e-8, beta2=0.99, lr=1e-3, device=torch.device('cpu'),solve_x=False, collect_info=True):
         self.max_params = max_params
         self.min_params = min_params
