@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.rmsprop import RMSprop
-from optimizers import BCGD, CGD, MCGD, ACGD, OCGD
+from optimizers import BCGD, ACGD, OCGD
 from models import dc_D, dc_G, dc_d, dc_g, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
 from torchvision.models.inception import inception_v3
 import csv
@@ -15,6 +15,7 @@ import numpy as np
 from torch.nn import functional as F
 import os
 import time
+import matplotlib.pyplot as plt
 seed = torch.randint(0, 1000000, (1,))
 # bad seeds: 850527
 # good seeds: 952132, 64843
@@ -283,6 +284,7 @@ class VisionData():
     def train_bcgd(self, epoch_num=100, mode='BCGD', collect_info=False, dataname='CIFAR', logname='CIFAR', loss_type='JSD'):
         timer = time.time()
         start = time.time()
+        is_lsit = []
         if collect_info:
             self.writer_init(logname=logname, comments='%s-%.4fDP%.4fGP%.4f%.5f' % (mode, self.lr, self.d_penalty, self.g_penalty, self.weight_decay))
             self.iswriter.writeheader()
@@ -290,10 +292,7 @@ class VisionData():
             optimizer = BCGD(max_params=list(self.G.parameters()), min_params=list(self.D.parameters()), lr=self.lr,
                          weight_decay=self.weight_decay, device=self.device, solve_x=False, collect_info=collect_info)
         elif mode == 'ACGD':
-            optimizer = ACGD(max_params=list(self.G.parameters()), min_params=list(self.D.parameters()), lr=self.lr,
-                         weight_decay=self.weight_decay, device=self.device, solve_x=False, collect_info=collect_info)
-        elif mode == 'MCGD':
-            optimizer = MCGD(max_params=self.G, min_params=self.D, lr=self.lr, device=self.device, solve_x=False, collect_info=collect_info)
+            optimizer = ACGD(max_params=self.G, min_params=self.D, lr=self.lr, device=self.device, solve_x=False, collect_info=collect_info)
         for e in range(epoch_num):
             for real_x in self.dataloader:
                 real_x = real_x[0].to(self.device)
@@ -334,11 +333,18 @@ class VisionData():
                 self.count += 1
                 if self.count % 5000 == 0:
                     is_mean, is_std = self.get_inception_score(batch_num=500)
-                    print('inception score- mean: {}}, std: {}'.format(is_mean, is_std))
+                    is_lsit.append(is_mean)
+                    print('inception score- mean: {}, std: {}'.format(is_mean, is_std))
                     if collect_info:
                         self.iswriter.writerow({'iter': self.count, 'is_mean':is_mean, 'is_std': is_std,
                                                 'time': time.time()-start, 'gradient calls': 2 * iter_num + 4 })
         self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr, self.count), dataset=dataname)
+        len_list = len(is_lsit)
+        plt.plot(np.arange(len_list) * 5, is_lsit)
+        plt.ylabel('Inception score')
+        plt.xlabel('iteration(k)')
+        plt.show()
+
 
     def train_d(self, epoch_num, mode = 'Adam', dataname='MNIST', logname='MNIST'):
         print(mode)
@@ -586,7 +592,7 @@ def train_wgan():
     # d_penalty: L2 penalty on discriminator;
     # gp_weight: gradient penalty weight
     # trainer.load_checkpoint(chkpt_path='')
-    trainer.train_bcgd(epoch_num=900, mode='MCGD', collect_info=True, dataname='CIFAR10-WGAN', logname='CIFAR10-WGAN', loss_type='WGAN')
+    trainer.train_bcgd(epoch_num=900, mode='ACGD', collect_info=True, dataname='CIFAR10-WGAN', logname='CIFAR10-WGAN', loss_type='WGAN')
     # Loss type: JSD, WGAN
     # trainer.train_bcgd(epoch_num=120, mode='ACGD', collect_info=True, dataname='CIFAR10-WGAN', logname='CIFAR10-WGAN', loss_type='WGAN')
 

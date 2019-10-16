@@ -13,7 +13,7 @@ def zero_grad(params):
             p.grad.detach()
             p.grad.zero_()
 
-            
+
 class BCGD(object):
     def __init__(self, max_params, min_params, lr=1e-3, weight_decay=0, device=torch.device('cpu'),solve_x=False, collect_info=True):
         self.max_params = max_params
@@ -96,7 +96,7 @@ class BCGD(object):
         self.solve_x = False if self.solve_x else True
 
 
-class OCGD(object): # one side CGD
+class OCGD(object):
     def __init__(self, max_params, min_params, eps=1e-5, beta2=0.99, lr=1e-3, device=torch.device('cpu'),
                  update_min=False, collect_info=True):
         self.max_params = max_params
@@ -193,7 +193,7 @@ class OCGD(object): # one side CGD
             self.norm_cgy = 0
 
 
-class MCGD(object): # allow multi GPU
+class ACGD(object): # allow multi GPU
     def __init__(self, max_params, min_params, eps=1e-8, beta2=0.99, lr=1e-3, device=torch.device('cpu'),solve_x=False, collect_info=True):
         self.max_params = max_params
         self.min_params = min_params
