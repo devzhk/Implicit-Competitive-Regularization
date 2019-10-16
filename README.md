@@ -9,13 +9,13 @@ Repro code for paper: `VisionData.py`, `wgan_gp.py`
 ## How to use new optimizer(ACGD) in our paper
 Copy the `optimizers.py` and `cgd_utils.py`
 ```python
-from optimizers import MCGD, BCGD
+from optimizers import ACGD, BCGD
 device = torch.device('cuda:0')
 lr = 0.0001
 G = Generator()
 D = Discriminator()
 optimizer = MCGD(max_params=G, min_params=D, lr=lr, device=device)
-# MCGD: ACGD; BCGD: naive CGD;
+# ACGD: Adaptive learning rates CGD; BCGD: naive CGD;
 for img in dataloader:
     d_real = D(img)
     z = torch.randn((batch_size, z_dim), device=device)
