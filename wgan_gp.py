@@ -223,7 +223,7 @@ def train_cifar():
     z_dim = 128
     D = GoodDiscriminator()
     G = GoodGenerator()
-    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform)
+    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform, download=True)
     trainer = WGAN_GP(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=batch_size,
                       lr=learning_rate,
                       show_iter=500, gp_weight=10, d_penalty=0.0, d_iter=5, noise_shape=(64, z_dim))

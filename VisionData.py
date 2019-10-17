@@ -623,7 +623,7 @@ def train_cifar():
     z_dim = 96
     D = dc_d()
     G = dc_g(z_dim=z_dim)
-    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform)
+    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform, download=True)
     trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim,
                          batchsize=batch_size, lr=learning_rate,
                          show_iter=500, weight_decay=0.0, d_penalty=0.001, g_penalty=0,
@@ -651,7 +651,7 @@ def train_wgan():
     else:
         D = GoodDiscriminator()
     G = GoodGenerator()
-    dataset = CIFAR10(root='datas/cifar10', download=False, train=True, transform=transform)
+    dataset = CIFAR10(root='datas/cifar10', download=True, train=True, transform=transform)
     trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim,
                          batchsize=batch_size, lr=learning_rate,
                          show_iter=500, weight_decay=0.0, d_penalty=0.0001, g_penalty=0,
