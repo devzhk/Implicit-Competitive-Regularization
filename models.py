@@ -1,6 +1,7 @@
-import torch
 import torch.nn as nn
+
 DIM = 64
+
 
 class GoodGenerator(nn.Module):
     def __init__(self):
@@ -51,15 +52,16 @@ class GoodDiscriminator(nn.Module):
             # nn.Dropout2d(),
             # 4 x 4
         )
-        self.linear = nn.Linear(4*4*4*DIM, 1)
+        self.linear = nn.Linear(4 * 4 * 4 * DIM, 1)
 
     def forward(self, input):
         output = self.main_module(input)
-        output = output.view(-1, 4*4*4*DIM)
+        output = output.view(-1, 4 * 4 * 4 * DIM)
         # print(output.shape)
         output = self.linear(output)
         # print(output.shape)
         return output
+
 
 class GoodDiscriminatord(nn.Module):
     def __init__(self, dropout=0.5):
@@ -78,11 +80,11 @@ class GoodDiscriminatord(nn.Module):
             nn.Dropout2d(dropout),
             # 4 x 4
         )
-        self.linear = nn.Linear(4*4*4*DIM, 1)
+        self.linear = nn.Linear(4 * 4 * 4 * DIM, 1)
 
     def forward(self, input):
         output = self.main_module(input)
-        output = output.view(-1, 4*4*4*DIM)
+        output = output.view(-1, 4 * 4 * 4 * DIM)
         # print(output.shape)
         output = self.linear(output)
         # print(output.shape)
@@ -96,11 +98,11 @@ class dc_d(nn.Module):
             # 3 * 32x32
             nn.Conv2d(in_channels=3, out_channels=32, kernel_size=5, stride=1),
             nn.LeakyReLU(0.01),
-            nn.MaxPool2d(2,2),
+            nn.MaxPool2d(2, 2),
             # 32 * 14x14
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, stride=1),
             nn.LeakyReLU(0.01),
-            nn.MaxPool2d(2,2)
+            nn.MaxPool2d(2, 2)
             # 64 * 5x5
         )
         self.fc = nn.Sequential(
@@ -127,7 +129,8 @@ class dc_g(nn.Module):
             nn.BatchNorm1d(8 * 8 * 128),
         )
         self.convt = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2,
+                               padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(64),
             nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=4, stride=2, padding=1),
@@ -138,7 +141,6 @@ class dc_g(nn.Module):
         x = self.fc(x)
         x = x.view(x.shape[0], 128, 8, 8)
         return self.convt(x)
-
 
 
 class DC_g(nn.Module):
@@ -192,23 +194,28 @@ class DC_generator(nn.Module):
     def __init__(self, z_dim=100, channel_num=3, feature_num=64):
         super(DC_generator, self).__init__()
         self.main_module = nn.Sequential(
-            nn.ConvTranspose2d(z_dim, feature_num * 8, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.ConvTranspose2d(z_dim, feature_num * 8, kernel_size=4, stride=1, padding=0,
+                               bias=False),
             nn.BatchNorm2d(feature_num * 8),
             nn.ReLU(inplace=True),
             # (feature_num * 8) * 4x4
-            nn.ConvTranspose2d(feature_num * 8, feature_num * 4, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(feature_num * 8, feature_num * 4, kernel_size=4, stride=2, padding=1,
+                               bias=False),
             nn.BatchNorm2d(feature_num * 4),
             nn.ReLU(inplace=True),
             # (feature_num * 4) * 8x8
-            nn.ConvTranspose2d(feature_num * 4, feature_num * 2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(feature_num * 4, feature_num * 2, kernel_size=4, stride=2, padding=1,
+                               bias=False),
             nn.BatchNorm2d(feature_num * 2),
             nn.ReLU(inplace=True),
             # (feature_num * 2) * 16x16
-            nn.ConvTranspose2d(feature_num * 2, feature_num, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(feature_num * 2, feature_num, kernel_size=4, stride=2, padding=1,
+                               bias=False),
             nn.BatchNorm2d(feature_num),
             nn.ReLU(inplace=True),
             # (feature_num * 2) * 32x32
-            nn.ConvTranspose2d(feature_num, channel_num, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(feature_num, channel_num, kernel_size=4, stride=2, padding=1,
+                               bias=False),
             # channel_num * 64x64
             nn.Tanh()
         )
@@ -229,11 +236,13 @@ class DC_discriminator(nn.Module):
             nn.BatchNorm2d(feature_num * 2),
             nn.LeakyReLU(0.2, inplace=True),
             # (feature_num * 2) * 16x16
-            nn.Conv2d(feature_num * 2, feature_num * 4, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(feature_num * 2, feature_num * 4, kernel_size=4, stride=2, padding=1,
+                      bias=False),
             nn.BatchNorm2d(feature_num * 4),
             nn.LeakyReLU(0.2, inplace=True),
             # (feature_num * 4) * 8x8
-            nn.Conv2d(feature_num * 4, feature_num * 8, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(feature_num * 4, feature_num * 8, kernel_size=4, stride=2, padding=1,
+                      bias=False),
             nn.BatchNorm2d(feature_num * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # (feature_num * 8) * 4x4
@@ -259,12 +268,14 @@ class DC_discriminatord(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout2d(),
             # (feature_num * 2) * 16x16
-            nn.Conv2d(feature_num * 2, feature_num * 4, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(feature_num * 2, feature_num * 4, kernel_size=4, stride=2, padding=1,
+                      bias=False),
             nn.BatchNorm2d(feature_num * 4),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout2d(),
             # (feature_num * 4) * 8x8
-            nn.Conv2d(feature_num * 4, feature_num * 8, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(feature_num * 4, feature_num * 8, kernel_size=4, stride=2, padding=1,
+                      bias=False),
             nn.BatchNorm2d(feature_num * 8),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout2d(),
@@ -276,6 +287,7 @@ class DC_discriminatord(nn.Module):
     def forward(self, input):
         return self.main_module(input)
 
+
 class dc_D(nn.Module):
     def __init__(self):
         super(dc_D, self).__init__()
@@ -283,11 +295,11 @@ class dc_D(nn.Module):
             nn.Conv2d(in_channels=1, out_channels=32, kernel_size=5, stride=1),
             nn.LeakyReLU(0.01),
             # nn.BatchNorm2d(32),
-            nn.MaxPool2d(2,2),
+            nn.MaxPool2d(2, 2),
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, stride=1),
             nn.LeakyReLU(0.01),
             # nn.BatchNorm2d(64),
-            nn.MaxPool2d(2,2)
+            nn.MaxPool2d(2, 2)
         )
         self.fc = nn.Sequential(
             nn.Linear(1024, 1024),
@@ -313,7 +325,8 @@ class dc_G(nn.Module):
             nn.BatchNorm1d(7 * 7 * 128),
         )
         self.convt = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2,
+                               padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(64),
             nn.ConvTranspose2d(in_channels=64, out_channels=1, kernel_size=4, stride=2, padding=1),
@@ -324,4 +337,3 @@ class dc_G(nn.Module):
         x = self.fc(x)
         x = x.view(x.shape[0], 128, 7, 7)
         return self.convt(x)
-
