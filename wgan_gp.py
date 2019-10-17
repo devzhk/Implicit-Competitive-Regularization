@@ -182,6 +182,8 @@ class WGAN_GP():
                     d_penalty=None):
         self.writer_init(logname=dirname, comments=dataname)
         feildnames = ['iter', 'is_mean', 'is_std', 'time']
+        if not os.path.exists("results"):
+            os.mkdir("results")
         path = 'results/wgangp_inception_score.csv'
         f = open(path, 'w')
         self.iswriter = csv.DictWriter(f, feildnames)
