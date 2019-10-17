@@ -208,3 +208,10 @@ def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_
         if rdotr < residual_tol or rdotr < 1e-32:
             break
     return x, i + 1
+
+
+def zero_grad(params):
+    for p in params:
+        if p.grad is not None:
+            p.grad.detach()
+            p.grad.zero_()

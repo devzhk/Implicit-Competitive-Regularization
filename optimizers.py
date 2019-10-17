@@ -5,14 +5,7 @@ import torch
 import torch.autograd as autograd
 
 from cgd_utils import conjugate_gradient, Hvp_vec, general_conjugate_gradient, Hvpvec, \
-    mgeneral_conjugate_gradient
-
-
-def zero_grad(params):
-    for p in params:
-        if p.grad is not None:
-            p.grad.detach()
-            p.grad.zero_()
+    mgeneral_conjugate_gradient, zero_grad
 
 
 class BCGD(object):

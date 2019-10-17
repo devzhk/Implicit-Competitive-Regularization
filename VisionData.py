@@ -18,6 +18,7 @@ from torchvision.models.inception import inception_v3
 
 from models import dc_D, dc_G, dc_d, dc_g, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
 from optimizers import BCGD, ACGD, OCGD
+from cgd_utils import zero_grad
 
 seed = torch.randint(0, 1000000, (1,))
 # bad seeds: 850527
@@ -45,13 +46,6 @@ def weights_init_g(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.01)
-
-
-def zero_grad(net):
-    for p in net.parameters():
-        if p.grad is not None:
-            p.grad.detach()
-            p.grad.zero_()
 
 
 class VisionData():
@@ -409,7 +403,7 @@ class VisionData():
                 D_loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
                          self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
                 d_optimizer.zero_grad()
-                zero_grad(self.G)
+                zero_grad(self.G.parameters())
                 D_loss.backward()
                 d_optimizer.step()
 
@@ -453,7 +447,7 @@ class VisionData():
             # G_loss = g_loss(d_fake)
             G_loss = self.criterion(d_fake, torch.ones(d_fake.shape, device=self.device))
             g_optimizer.zero_grad()
-            zero_grad(self.D)
+            zero_grad(self.D.parameters())
             G_loss.backward()
             g_optimizer.step()
             gd = torch.norm(torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]),
