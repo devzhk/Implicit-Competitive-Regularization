@@ -27,7 +27,7 @@ for img in dataloader:
 
 
 ## Citation
-Please cite the following paper if you found this code useful. Thanks!
+Please cite the following paper if you find this code useful. Thanks!
 ```
 @misc{schfer2019implicit,
     title={Implicit competitive regularization in GANs},
