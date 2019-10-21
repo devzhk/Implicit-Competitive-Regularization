@@ -1,26 +1,30 @@
-import torch
-from torchvision import transforms
-from models import GoodGenerator, GoodDiscriminator
-from torch.utils.data import DataLoader
-from tensorboardX import SummaryWriter
-from torchvision.datasets import CIFAR10
-import torch.optim as optim
-import torch.nn as nn
-import time
-import os
-from torchvision.models.inception import inception_v3
-import numpy as np
-from torch.nn import functional as F
 import csv
+import os
+import time
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from tensorboardX import SummaryWriter
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from torchvision.datasets import CIFAR10
+from torchvision.models.inception import inception_v3
+
+from models import GoodGenerator, GoodDiscriminator
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
 
 def transform(x):
     x = transforms.ToTensor()(x)
     return (x - 0.5) / 0.5
 
+
 def detransform(x):
     return (x + 1.0) / 2.0
+
 
 def weights_init_d(m):
     classname = m.__class__.__name__
@@ -36,8 +40,10 @@ def weights_init_g(m):
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.005)
 
+
 class WGAN_GP():
-    def __init__(self, D, G, device, dataset, z_dim=8, batchsize=256, lr=0.1, show_iter=100, gp_weight=10.0,
+    def __init__(self, D, G, device, dataset, z_dim=8, batchsize=256, lr=0.1, show_iter=100,
+                 gp_weight=10.0,
                  d_penalty=0.0, d_iter=1, noise_shape=(64, 8)):
         self.lr = lr
         self.batchsize = batchsize
@@ -48,7 +54,8 @@ class WGAN_GP():
         self.gp_weight = gp_weight
         self.d_penalty = d_penalty
         self.d_iter = d_iter
-        self.dataloader = DataLoader(dataset=dataset, batch_size=self.batchsize, shuffle=True, pin_memory=True, drop_last=True)
+        self.dataloader = DataLoader(dataset=dataset, batch_size=self.batchsize, shuffle=True,
+                                     pin_memory=True, drop_last=True)
         print('learning rate: %.5f \n'
               'l2 penalty on discriminator: %.5f\n'
               'gradient penalty weight: %.3f'
@@ -73,8 +80,8 @@ class WGAN_GP():
         if not os.path.exists(chk_name):
             os.mkdir(chk_name)
         torch.save({
-            'D':self.D.state_dict(),
-            'G':self.G.state_dict(),
+            'D': self.D.state_dict(),
+            'G': self.G.state_dict(),
         }, chk_name + path)
         print('save models at %s' % chk_name + path)
 
@@ -96,16 +103,20 @@ class WGAN_GP():
         interploted.requires_grad = True
         interploted_d = self.D(interploted)
         gradients = torch.autograd.grad(outputs=interploted_d, inputs=interploted,
-                                        grad_outputs=torch.ones(interploted_d.size(), device=self.device),
+                                        grad_outputs=torch.ones(interploted_d.size(),
+                                                                device=self.device),
                                         create_graph=True, retain_graph=True)[0]
         gradients = gradients.view(self.batchsize, -1)
-        self.writer.add_scalars('Gradients',{'D gradient L2norm': gradients.norm(p=2, dim=1).mean().item()}, self.count)
+        self.writer.add_scalars('Gradients',
+                                {'D gradient L2norm': gradients.norm(p=2, dim=1).mean().item()},
+                                self.count)
         gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
         return self.gp_weight * ((gradients_norm - 1.0) ** 2).mean()
 
     def get_inception_score(self, batch_num, splits_num=10):
         net = inception_v3(pretrained=True, transform_input=False).eval().to(self.device)
-        resize_module = nn.Upsample(size=(299, 299), mode='bilinear', align_corners=True).to(self.device)
+        resize_module = nn.Upsample(size=(299, 299), mode='bilinear', align_corners=True).to(
+            self.device)
         preds = np.zeros((self.batchsize * batch_num, 1000))
         for e in range(batch_num):
             imgs = resize_module(self.generate_data())
@@ -115,7 +126,8 @@ class WGAN_GP():
         chunk_size = preds.shape[0] // splits_num
         for k in range(splits_num):
             pred_chunk = preds[k * chunk_size: k * chunk_size + chunk_size, :]
-            kl_score = pred_chunk * (np.log(pred_chunk) - np.log(np.expand_dims(np.mean(pred_chunk, 0), 0)))
+            kl_score = pred_chunk * (
+                        np.log(pred_chunk) - np.log(np.expand_dims(np.mean(pred_chunk, 0), 0)))
             kl_score = np.mean(np.sum(kl_score, 1))
             split_score.append(np.exp(kl_score))
         return np.mean(split_score), np.std(split_score)
@@ -127,14 +139,16 @@ class WGAN_GP():
         d_loss = d_fake.mean() - d_real.mean()
         if gp:
             gradient_penalty = self.gradient_penalty(real_x=real_x, fake_x=fake_x)
-            self.writer.add_scalars('Loss', {'gradient penalty': gradient_penalty.item()}, self.count)
+            self.writer.add_scalars('Loss', {'gradient penalty': gradient_penalty.item()},
+                                    self.count)
             d_loss = d_loss + gradient_penalty
         if d_penalty is not None:
             l2_penalty = self.l2_penalty(d_penalty)
             self.writer.add_scalars('Loss', {'l2 penalty': l2_penalty.item()}, self.count)
             d_loss = d_loss + l2_penalty
 
-        self.writer.add_scalars('Discriminator output', {'real': d_real.mean(), 'fake': d_fake.mean()}, self.count)
+        self.writer.add_scalars('Discriminator output',
+                                {'real': d_real.mean(), 'fake': d_fake.mean()}, self.count)
         wd = torch.norm(torch.cat([p.contiguous().view(-1) for p in self.D.parameters()]), p=2)
         wg = torch.norm(torch.cat([p.contiguous().view(-1) for p in self.G.parameters()]), p=2)
         self.writer.add_scalars('weight', {'D params': wd, 'G params': wg.item()}, self.count)
@@ -145,9 +159,11 @@ class WGAN_GP():
         self.writer.add_scalars('Loss', {'D loss': d_loss.item()}, self.count)
         if self.count % self.show_iter == 0:
             if gp:
-                print('Iter: %d, D loss: %.5f, Gradient penalty: %.5f ' %(self.count, d_loss.item(), gradient_penalty.item()))
+                print('Iter: %d, D loss: %.5f, Gradient penalty: %.5f ' % (
+                self.count, d_loss.item(), gradient_penalty.item()))
             elif d_penalty is not None:
-                print('Iter: %d, D loss: %.5f, l2 penalty: %.5f ' % (self.count, d_loss.item(), l2_penalty.item()))
+                print('Iter: %d, D loss: %.5f, l2 penalty: %.5f ' % (
+                self.count, d_loss.item(), l2_penalty.item()))
             else:
                 print('Iter: %d, D loss: %.5f' % (self.count, d_loss.item()))
 
@@ -162,9 +178,12 @@ class WGAN_GP():
         if self.count % self.show_iter == 0:
             print('Iter: %d, G loss: %.5f ' % (self.count, g_loss.item()))
 
-    def train_epoch(self, epoch_num=10, dirname='WGANGP', dataname='CIFAR10', gp=True, d_penalty=None):
+    def train_epoch(self, epoch_num=10, dirname='WGANGP', dataname='CIFAR10', gp=True,
+                    d_penalty=None):
         self.writer_init(logname=dirname, comments=dataname)
         feildnames = ['iter', 'is_mean', 'is_std', 'time']
+        if not os.path.exists("results"):
+            os.mkdir("results")
         path = 'results/wgangp_inception_score.csv'
         f = open(path, 'w')
         self.iswriter = csv.DictWriter(f, feildnames)
@@ -177,7 +196,7 @@ class WGAN_GP():
                 self.train_d(real_x, gp=gp, d_penalty=d_penalty)
                 if self.count % self.d_iter == 0:
                     self.train_g()
-                if self.count % self.show_iter ==0:
+                if self.count % self.show_iter == 0:
                     timer = time.time() - timer
                     print('time cost: %.2f' % timer)
                     img = self.G(self.fixed_noise).detach()
@@ -189,8 +208,11 @@ class WGAN_GP():
                         score_mean, score_std = self.get_inception_score(batch_num=500)
                         np.set_printoptions(precision=4)
                         print('inception score mean: {}, std: {}'.format(score_mean, score_std))
-                        self.iswriter.writerow({'iter': self.count, 'is_mean': score_mean, 'is_std': score_std, 'time': time.time() - start})
-                        self.writer.add_scalars('Inception scores', {'mean': score_mean}, self.count)
+                        self.iswriter.writerow(
+                            {'iter': self.count, 'is_mean': score_mean, 'is_std': score_std,
+                             'time': time.time() - start})
+                        self.writer.add_scalars('Inception scores', {'mean': score_mean},
+                                                self.count)
                 self.count += 1
 
 
@@ -203,18 +225,13 @@ def train_cifar():
     z_dim = 128
     D = GoodDiscriminator()
     G = GoodGenerator()
-    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform)
-    trainer = WGAN_GP(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=batch_size, lr=learning_rate,
+    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform, download=True)
+    trainer = WGAN_GP(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=batch_size,
+                      lr=learning_rate,
                       show_iter=500, gp_weight=10, d_penalty=0.0, d_iter=5, noise_shape=(64, z_dim))
-    trainer.train_epoch(epoch_num=3000, dirname='WGAN-GP', dataname='CIFAR10', gp=True, d_penalty=None)
+    trainer.train_epoch(epoch_num=3000, dirname='WGAN-GP', dataname='CIFAR10', gp=True,
+                        d_penalty=None)
 
 
 if __name__ == '__main__':
     train_cifar()
-
-
-
-
-
-
-

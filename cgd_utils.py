@@ -1,9 +1,10 @@
 import torch
 import torch.autograd as autograd
 import torch.nn as nn
-from scipy.sparse.linalg import cg
 
-def conjugate_gradient(grad_x, grad_y, x_params, y_params, b, x=None, nsteps=10, residual_tol=1e-18, lr=1.0, device=torch.device('cpu')):
+
+def conjugate_gradient(grad_x, grad_y, x_params, y_params, b, x=None, nsteps=10, residual_tol=1e-18,
+                       lr=1.0, device=torch.device('cpu')):
     '''
     :param grad_x:
     :param grad_y:
@@ -22,7 +23,7 @@ def conjugate_gradient(grad_x, grad_y, x_params, y_params, b, x=None, nsteps=10,
         x = torch.zeros(b.shape[0], device=device)
     r = b.clone().detach()
     p = r.clone().detach()
-    rdotr = torch.dot(r,r)
+    rdotr = torch.dot(r, r)
     residual_tol = residual_tol * rdotr
     for i in range(nsteps):
         # To compute Avp
@@ -50,10 +51,12 @@ def Hvp(grad_vec, params, vec, retain_graph=False):
 
 def Hvpvec(grad_vec, params, vec, retain_graph=False):
     try:
-        grad_grad = autograd.grad(grad_vec, params.parameters(), grad_outputs=vec, retain_graph=retain_graph)
+        grad_grad = autograd.grad(grad_vec, params.parameters(), grad_outputs=vec,
+                                  retain_graph=retain_graph)
         hvp = torch.cat([g.contiguous().view(-1) for g in grad_grad])
     except:
-        grad_grad = autograd.grad(grad_vec, params.parameters(), grad_outputs=vec, retain_graph=retain_graph, allow_unused=True)
+        grad_grad = autograd.grad(grad_vec, params.parameters(), grad_outputs=vec,
+                                  retain_graph=retain_graph, allow_unused=True)
         grad_list = []
         for i, p in enumerate(params.parameters()):
             if grad_grad[i] is None:
@@ -79,7 +82,8 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
             raise ValueError('hvp Nan')
     except:
         # print('filling zero for None')
-        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph, allow_unused=True)
+        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph,
+                                  allow_unused=True)
         grad_list = []
         for i, p in enumerate(params):
             if grad_grad[i] is None:
@@ -94,7 +98,7 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
 
 def weights_init(m):
     classname = m.__class__.__name__
-    if classname.find('Linear')!=-1:
+    if classname.find('Linear') != -1:
         m.weight.data.normal_(0.0, 0.05)
         m.bias.data.fill_(0)
     else:
@@ -102,7 +106,8 @@ def weights_init(m):
         nn.init.constant_(m.g.data, 1.5)
 
 
-def general_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y, x=None, nsteps=10, residual_tol=1e-16,
+def general_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y, x=None, nsteps=10,
+                               residual_tol=1e-16,
                                device=torch.device('cpu')):
     '''
 
@@ -127,7 +132,7 @@ def general_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y
     lr_x = lr_x.sqrt()
     r = b.clone().detach()
     p = r.clone().detach()
-    rdotr = torch.dot(r,r)
+    rdotr = torch.dot(r, r)
     residual_tol = residual_tol * rdotr
     for i in range(nsteps):
         # To compute Avp
@@ -153,8 +158,9 @@ def general_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y
     return x, i + 1
 
 
-def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y, x=None, nsteps=10, residual_tol=1e-18,
-                               device=torch.device('cpu')):
+def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y, x=None,
+                                nsteps=10, residual_tol=1e-18,
+                                device=torch.device('cpu')):
     '''
 
     :param grad_x:
@@ -178,7 +184,7 @@ def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_
     lr_x = lr_x.sqrt()
     r = b.clone().detach()
     p = r.clone().detach()
-    rdotr = torch.dot(r,r)
+    rdotr = torch.dot(r, r)
     residual_tol = residual_tol * rdotr
     for i in range(nsteps):
         # To compute Avp
@@ -202,3 +208,10 @@ def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_
         if rdotr < residual_tol or rdotr < 1e-32:
             break
     return x, i + 1
+
+
+def zero_grad(params):
+    for p in params:
+        if p.grad is not None:
+            p.grad.detach()
+            p.grad.zero_()

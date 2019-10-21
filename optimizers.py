@@ -1,19 +1,16 @@
-from cgd_utils import conjugate_gradient, Hvp, Hvp_vec, general_conjugate_gradient, Hvpvec, mgeneral_conjugate_gradient
-import torch.autograd as autograd
-import torch
-import time
 import math
+import time
 
+import torch
+import torch.autograd as autograd
 
-def zero_grad(params):
-    for p in params:
-        if p.grad is not None:
-            p.grad.detach()
-            p.grad.zero_()
+from cgd_utils import conjugate_gradient, Hvp_vec, general_conjugate_gradient, Hvpvec, \
+    mgeneral_conjugate_gradient, zero_grad
 
 
 class BCGD(object):
-    def __init__(self, max_params, min_params, lr=1e-3, weight_decay=0, device=torch.device('cpu'),solve_x=False, collect_info=True):
+    def __init__(self, max_params, min_params, lr=1e-3, weight_decay=0, device=torch.device('cpu'),
+                 solve_x=False, collect_info=True):
         self.max_params = max_params
         self.min_params = min_params
         self.lr = lr
@@ -34,7 +31,8 @@ class BCGD(object):
             return self.norm_gx, self.norm_gy, self.norm_px, self.norm_py, self.norm_cgx, self.norm_cgy, \
                    self.timer, self.iter_num
         else:
-            raise ValueError('No update information stored. Set collect_info=True before call this method')
+            raise ValueError(
+                'No update information stored. Set collect_info=True before call this method')
 
     def step(self, loss):
         grad_x = autograd.grad(loss, self.max_params, create_graph=True, retain_graph=True)
@@ -42,8 +40,10 @@ class BCGD(object):
         grad_y = autograd.grad(loss, self.min_params, create_graph=True, retain_graph=True)
         grad_y_vec = torch.cat([g.contiguous().view(-1) for g in grad_y])
 
-        hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, grad_y_vec, retain_graph=True)  # h_xy * d_y
-        hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, grad_x_vec, retain_graph=True)  # h_yx * d_x
+        hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, grad_y_vec,
+                            retain_graph=True)  # h_xy * d_y
+        hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, grad_x_vec,
+                            retain_graph=True)  # h_yx * d_x
 
         p_x = torch.add(grad_x_vec, - self.lr * hvp_x_vec)
         p_y = torch.add(grad_y_vec, self.lr * hvp_y_vec)
@@ -52,16 +52,20 @@ class BCGD(object):
             self.norm_py = torch.norm(p_y, p=2)
             self.timer = time.time()
         if self.solve_x:
-            cg_y, self.iter_num = conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec, x_params=self.min_params,
-                                                y_params=self.max_params, b=p_y, x=self.old_y, nsteps=p_y.shape[0]//10000,
-                                                lr=self.lr, device=self.device)
+            cg_y, self.iter_num = conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                                                     x_params=self.min_params,
+                                                     y_params=self.max_params, b=p_y, x=self.old_y,
+                                                     nsteps=p_y.shape[0] // 10000,
+                                                     lr=self.lr, device=self.device)
             hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y)
             cg_x = torch.add(grad_x_vec, - self.lr * hcg)
             self.old_x = cg_x
         else:
-            cg_x, self.iter_num = conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec, x_params=self.max_params,
-                                                y_params=self.min_params, b=p_x, x=self.old_x, nsteps=p_x.shape[0]//10000,
-                                                lr=self.lr, device=self.device)
+            cg_x, self.iter_num = conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                                                     x_params=self.max_params,
+                                                     y_params=self.min_params, b=p_x, x=self.old_x,
+                                                     nsteps=p_x.shape[0] // 10000,
+                                                     lr=self.lr, device=self.device)
             hcg = Hvp_vec(grad_x_vec, self.min_params, cg_x)
             cg_y = torch.add(grad_y_vec, self.lr * hcg)
             self.old_y = cg_y
@@ -95,7 +99,8 @@ class BCGD(object):
 
 
 class OCGD(object):
-    def __init__(self, max_params, min_params, eps=1e-5, beta2=0.99, lr=1e-3, device=torch.device('cpu'),
+    def __init__(self, max_params, min_params, eps=1e-5, beta2=0.99, lr=1e-3,
+                 device=torch.device('cpu'),
                  update_min=False, collect_info=True):
         self.max_params = max_params
         self.min_params = min_params
@@ -122,7 +127,8 @@ class OCGD(object):
             return self.norm_gx, self.norm_gy, self.norm_px, self.norm_py, self.norm_cgx, self.norm_cgy, \
                    self.timer, self.iter_num
         else:
-            raise ValueError('No update information stored. Set get_norms True before call this method')
+            raise ValueError(
+                'No update information stored. Set get_norms True before call this method')
 
     def step(self, loss):
         grad_x = autograd.grad(loss, self.max_params, create_graph=True, retain_graph=True)
@@ -141,8 +147,10 @@ class OCGD(object):
 
         scaled_grad_x = torch.mul(lr_x, grad_x_vec).detach()  # lr_x * grad_x
         scaled_grad_y = torch.mul(lr_y, grad_y_vec).detach()  # lr_y * grad_y
-        hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, scaled_grad_y, retain_graph=True)  # D_xy * lr_y * grad_y
-        hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, scaled_grad_x, retain_graph=True)  # D_yx * lr_x * grad_x
+        hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, scaled_grad_y,
+                            retain_graph=True)  # D_xy * lr_y * grad_y
+        hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, scaled_grad_x,
+                            retain_graph=True)  # D_yx * lr_x * grad_x
 
         p_x = torch.add(grad_x_vec, - hvp_x_vec)  # grad_x - D_xy * lr_y * grad_y
         p_y = torch.add(grad_y_vec, hvp_y_vec)  # grad_y + D_yx * lr_x * grad_x
@@ -156,9 +164,11 @@ class OCGD(object):
             p_y.mul_(lr_y.sqrt())
             cg_y, self.iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
                                                              x_params=self.min_params,
-                                                             y_params=self.max_params, b=p_y, x=self.old_y,
+                                                             y_params=self.max_params, b=p_y,
+                                                             x=self.old_y,
                                                              nsteps=p_y.shape[0] // 10000,
-                                                             lr_x=lr_y, lr_y=lr_x, device=self.device)
+                                                             lr_x=lr_y, lr_y=lr_x,
+                                                             device=self.device)
             # (I + lr_y.sqrt() * D_yx * lr_x * D_xy * lr_y.sqrt()) ** -1 * lr_y.sqrt() * p_y
             cg_y.mul_(- lr_y.sqrt())
             index = 0
@@ -171,9 +181,11 @@ class OCGD(object):
             p_x.mul_(lr_x.sqrt())
             cg_x, self.iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
                                                              x_params=self.max_params,
-                                                             y_params=self.min_params, b=p_x, x=self.old_x,
+                                                             y_params=self.min_params, b=p_x,
+                                                             x=self.old_x,
                                                              nsteps=p_x.shape[0] // 10000,
-                                                             lr_x=lr_x, lr_y=lr_y, device=self.device)
+                                                             lr_x=lr_x, lr_y=lr_y,
+                                                             device=self.device)
             # (I + lr_x.sqrt() * D_xy * lr_y * D_yx * lr_x.sqrt()) ** -1 * lr_x.sqrt() * p_x
             cg_x.mul_(lr_x.sqrt())  # delta x = lr_x.sqrt() * cg_x
             index = 0
@@ -191,8 +203,9 @@ class OCGD(object):
             self.norm_cgy = 0
 
 
-class ACGD(object): # Support multi GPU
-    def __init__(self, max_params, min_params, eps=1e-8, beta2=0.99, lr=1e-3, device=torch.device('cpu'),solve_x=False, collect_info=True):
+class ACGD(object):  # Support multi GPU
+    def __init__(self, max_params, min_params, eps=1e-8, beta2=0.99, lr=1e-3,
+                 device=torch.device('cpu'), solve_x=False, collect_info=True):
         self.max_params = max_params
         self.min_params = min_params
         self.lr = lr
@@ -219,33 +232,40 @@ class ACGD(object): # Support multi GPU
             return self.norm_gx, self.norm_gy, self.norm_px, self.norm_py, self.norm_cgx, self.norm_cgy, \
                    self.timer, self.iter_num
         else:
-            raise ValueError('No update information stored. Set get_norms True before call this method')
+            raise ValueError(
+                'No update information stored. Set get_norms True before call this method')
 
     def step(self, loss):
         self.count += 1
-        grad_x = autograd.grad(loss, self.max_params.parameters(), create_graph=True, retain_graph=True)
+        grad_x = autograd.grad(loss, self.max_params.parameters(), create_graph=True,
+                               retain_graph=True)
         grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
-        grad_y = autograd.grad(loss, self.min_params.parameters(), create_graph=True, retain_graph=True)
+        grad_y = autograd.grad(loss, self.min_params.parameters(), create_graph=True,
+                               retain_graph=True)
         grad_y_vec = torch.cat([g.contiguous().view(-1) for g in grad_y])
 
         if self.square_avgx is None and self.square_avgy is None:
-            self.square_avgx = torch.zeros(grad_x_vec.size(), requires_grad=False, device=self.device)
-            self.square_avgy = torch.zeros(grad_y_vec.size(), requires_grad=False, device=self.device)
+            self.square_avgx = torch.zeros(grad_x_vec.size(), requires_grad=False,
+                                           device=self.device)
+            self.square_avgy = torch.zeros(grad_y_vec.size(), requires_grad=False,
+                                           device=self.device)
         self.square_avgx.mul_(self.beta2).addcmul_(1 - self.beta2, grad_x_vec.data, grad_x_vec.data)
         self.square_avgy.mul_(self.beta2).addcmul_(1 - self.beta2, grad_y_vec.data, grad_y_vec.data)
 
         # Initialization bias correction
         bias_correction2 = 1 - self.beta2 ** self.count
 
-        lr_x = math.sqrt(bias_correction2) * self.lr  / self.square_avgx.sqrt().add(self.eps)
+        lr_x = math.sqrt(bias_correction2) * self.lr / self.square_avgx.sqrt().add(self.eps)
         lr_y = math.sqrt(bias_correction2) * self.lr / self.square_avgy.sqrt().add(self.eps)
-        scaled_grad_x = torch.mul(lr_x, grad_x_vec).detach() # lr_x * grad_x
-        scaled_grad_y = torch.mul(lr_y, grad_y_vec).detach() # lr_y * grad_y
-        hvp_x_vec = Hvpvec(grad_y_vec, self.max_params, scaled_grad_y, retain_graph=True)  # D_xy * lr_y * grad_y
-        hvp_y_vec = Hvpvec(grad_x_vec, self.min_params, scaled_grad_x, retain_graph=True)  # D_yx * lr_x * grad_x
+        scaled_grad_x = torch.mul(lr_x, grad_x_vec).detach()  # lr_x * grad_x
+        scaled_grad_y = torch.mul(lr_y, grad_y_vec).detach()  # lr_y * grad_y
+        hvp_x_vec = Hvpvec(grad_y_vec, self.max_params, scaled_grad_y,
+                           retain_graph=True)  # D_xy * lr_y * grad_y
+        hvp_y_vec = Hvpvec(grad_x_vec, self.min_params, scaled_grad_x,
+                           retain_graph=True)  # D_yx * lr_x * grad_x
 
-        p_x = torch.add(grad_x_vec, - hvp_x_vec).detach_() #grad_x - D_xy * lr_y * grad_y
-        p_y = torch.add(grad_y_vec, hvp_y_vec).detach_()   #grad_y + D_yx * lr_x * grad_x
+        p_x = torch.add(grad_x_vec, - hvp_x_vec).detach_()  # grad_x - D_xy * lr_y * grad_y
+        p_y = torch.add(grad_y_vec, hvp_y_vec).detach_()  # grad_y + D_yx * lr_x * grad_x
 
         if self.collect_info:
             self.norm_px = lr_x.max()
@@ -257,13 +277,16 @@ class ACGD(object): # Support multi GPU
             # if self.old_y is not None:
             #     self.old_y = self.old_y / p_y_norm
             cg_y, self.iter_num = mgeneral_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                             x_params=self.min_params,
-                                                             y_params=self.max_params, b=p_y, x=self.old_y,
-                                                             nsteps=p_y.shape[0] // 10000,
-                                                             lr_x=lr_y, lr_y=lr_x, device=self.device)
+                                                              x_params=self.min_params,
+                                                              y_params=self.max_params, b=p_y,
+                                                              x=self.old_y,
+                                                              nsteps=p_y.shape[0] // 10000,
+                                                              lr_x=lr_y, lr_y=lr_x,
+                                                              device=self.device)
             # cg_y.mul_(p_y_norm)
             cg_y.detach_().mul_(- lr_y.sqrt())
-            hcg = Hvpvec(grad_y_vec, self.max_params, cg_y, retain_graph=True).add_(grad_x_vec).detach_()
+            hcg = Hvpvec(grad_y_vec, self.max_params, cg_y, retain_graph=True).add_(
+                grad_x_vec).detach_()
             # grad_x + D_xy * delta y
             cg_x = hcg.mul(lr_x)
             self.old_x = hcg.mul(lr_x.sqrt())
@@ -273,13 +296,16 @@ class ACGD(object): # Support multi GPU
             # if self.old_x is not None:
             #     self.old_x = self.old_x / p_x_norm
             cg_x, self.iter_num = mgeneral_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                             x_params=self.max_params,
-                                                             y_params=self.min_params, b=p_x, x=self.old_x,
-                                                             nsteps=p_x.shape[0] // 10000,
-                                                             lr_x=lr_x, lr_y=lr_y, device=self.device)
+                                                              x_params=self.max_params,
+                                                              y_params=self.min_params, b=p_x,
+                                                              x=self.old_x,
+                                                              nsteps=p_x.shape[0] // 10000,
+                                                              lr_x=lr_x, lr_y=lr_y,
+                                                              device=self.device)
             # cg_x.detach_().mul_(p_x_norm)
-            cg_x.detach_().mul_(lr_x.sqrt()) # delta x = lr_x.sqrt() * cg_x
-            hcg = Hvpvec(grad_x_vec, self.min_params, cg_x, retain_graph=True).add_(grad_y_vec).detach_()
+            cg_x.detach_().mul_(lr_x.sqrt())  # delta x = lr_x.sqrt() * cg_x
+            hcg = Hvpvec(grad_x_vec, self.min_params, cg_x, retain_graph=True).add_(
+                grad_y_vec).detach_()
             # grad_y + D_yx * delta x
             cg_y = hcg.mul(- lr_y)
             self.old_y = hcg.mul(lr_y.sqrt())
