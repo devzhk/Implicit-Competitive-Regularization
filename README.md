@@ -7,8 +7,11 @@ Repro code for paper: `VisionData.py`, `wgan_gp.py`
 
 **I will keep updating..**
 ## How to use new optimizer(ACGD) in our paper
-Copy the `optimizers.py` and `cgd_utils.py`
+Copy `optimizers.py` and `cgd_utils.py` to your directory. 
+**It's important to force cudnn to benchmark and pick the best algo.**
 ```python
+import torch
+torch.backends.cudnn.benchmark = True
 from optimizers import ACGD
 device = torch.device('cuda:0')
 lr = 0.0001
