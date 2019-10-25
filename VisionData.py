@@ -118,7 +118,8 @@ class VisionData():
         preds = np.zeros((self.batchsize * batch_num, 1000))
         for e in range(batch_num):
             imgs = resize_module(self.generate_data())
-            pred = F.softmax(net(imgs), dim=1).data.cpu().numpy()
+            with torch.no_grad():
+                pred = F.softmax(net(imgs), dim=1).data.cpu().numpy()
             preds[e * self.batchsize: e * self.batchsize + self.batchsize] = pred
         split_score = []
         chunk_size = preds.shape[0] // splits_num
@@ -153,9 +154,9 @@ class VisionData():
         # print('load models from %s' % chkpt_path)
 
     def save_checkpoint(self, path, dataset):
-        chk_name = 'checkpoints/%.5f%s-%.4f/' % (self.d_penalty, dataset, self.lr)
+        chk_name = './checkpoints/%.5f%s-%.4f/' % (self.d_penalty, dataset, self.lr)
         if not os.path.exists(chk_name):
-            os.mkdir(chk_name)
+            os.makedirs(chk_name)
         torch.save({
             'D': self.D.state_dict(),
             'G': self.G.state_dict(),
