@@ -51,14 +51,14 @@ def Hvp(grad_vec, params, vec, retain_graph=False):
 
 def Hvpvec(grad_vec, params, vec, retain_graph=False):
     try:
-        grad_grad = autograd.grad(grad_vec, params.parameters(), grad_outputs=vec,
+        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec,
                                   retain_graph=retain_graph)
         hvp = torch.cat([g.contiguous().view(-1) for g in grad_grad])
     except:
-        grad_grad = autograd.grad(grad_vec, params.parameters(), grad_outputs=vec,
+        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec,
                                   retain_graph=retain_graph, allow_unused=True)
         grad_list = []
-        for i, p in enumerate(params.parameters()):
+        for i, p in enumerate(params):
             if grad_grad[i] is None:
                 grad_list.append(torch.zeros_like(p))
             else:
