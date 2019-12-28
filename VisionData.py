@@ -313,12 +313,12 @@ class VisionData():
             mode, self.lr, self.d_penalty, self.g_penalty, self.weight_decay))
             self.iswriter.writeheader()
         if mode == 'BCGD':
-            optimizer = BCGD(max_params=list(self.G.parameters()),
-                             min_params=list(self.D.parameters()), lr=self.lr,
+            optimizer = BCGD(max_params=self.G.parameters(),
+                             min_params=self.D.parameters(), lr=self.lr,
                              weight_decay=self.weight_decay, device=self.device, solve_x=False,
                              collect_info=collect_info)
         elif mode == 'ACGD':
-            optimizer = ACGD(max_params=self.G, min_params=self.D, lr=self.lr, device=self.device,
+            optimizer = ACGD(max_params=self.G.parameters(), min_params=self.D.parameters(), lr=self.lr, device=self.device,
                              solve_x=False, collect_info=collect_info)
         for e in range(epoch_num):
             for real_x in self.dataloader:

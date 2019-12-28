@@ -17,8 +17,8 @@ device = torch.device('cuda:0')
 lr = 0.0001
 G = Generator()
 D = Discriminator()
-optimizer = ACGD(max_params=G, min_params=D, lr=lr, device=device)
-# BCGD(max_params=list(G.parameters()), min_params=list(D.parameters()), lr=lr, device=device)
+optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(), lr=lr, device=device)
+# BCGD(max_params=G.parameters(), min_params=D.parameters(), lr=lr, device=device)
 # ACGD: Adaptive learning rates CGD;
 for img in dataloader:
     d_real = D(img)
