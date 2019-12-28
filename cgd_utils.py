@@ -58,7 +58,7 @@ def Hvpvec(grad_vec, params, vec, retain_graph=False):
         grad_grad = autograd.grad(grad_vec, params.parameters(), grad_outputs=vec,
                                   retain_graph=retain_graph, allow_unused=True)
         grad_list = []
-        for i, p in enumerate(params):
+        for i, p in enumerate(params.parameters()):
             if grad_grad[i] is None:
                 grad_list.append(torch.zeros_like(p))
             else:
