@@ -259,9 +259,9 @@ class ACGD(object):  # Support multi GPU
         lr_y = math.sqrt(bias_correction2) * self.lr / self.square_avgy.sqrt().add(self.eps)
         scaled_grad_x = torch.mul(lr_x, grad_x_vec).detach()  # lr_x * grad_x
         scaled_grad_y = torch.mul(lr_y, grad_y_vec).detach()  # lr_y * grad_y
-        hvp_x_vec = Hvpvec(grad_y_vec, self.max_params, scaled_grad_y,
+        hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, scaled_grad_y,
                            retain_graph=True)  # D_xy * lr_y * grad_y
-        hvp_y_vec = Hvpvec(grad_x_vec, self.min_params, scaled_grad_x,
+        hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, scaled_grad_x,
                            retain_graph=True)  # D_yx * lr_x * grad_x
 
         p_x = torch.add(grad_x_vec, - hvp_x_vec).detach_()  # grad_x - D_xy * lr_y * grad_y
@@ -285,7 +285,7 @@ class ACGD(object):  # Support multi GPU
                                                               device=self.device)
             # cg_y.mul_(p_y_norm)
             cg_y.detach_().mul_(- lr_y.sqrt())
-            hcg = Hvpvec(grad_y_vec, self.max_params, cg_y, retain_graph=True).add_(
+            hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y, retain_graph=True).add_(
                 grad_x_vec).detach_()
             # grad_x + D_xy * delta y
             cg_x = hcg.mul(lr_x)
@@ -304,7 +304,7 @@ class ACGD(object):  # Support multi GPU
                                                               device=self.device)
             # cg_x.detach_().mul_(p_x_norm)
             cg_x.detach_().mul_(lr_x.sqrt())  # delta x = lr_x.sqrt() * cg_x
-            hcg = Hvpvec(grad_x_vec, self.min_params, cg_x, retain_graph=True).add_(
+            hcg = Hvp_vec(grad_x_vec, self.min_params, cg_x, retain_graph=True).add_(
                 grad_y_vec).detach_()
             # grad_y + D_yx * delta x
             cg_y = hcg.mul(- lr_y)
