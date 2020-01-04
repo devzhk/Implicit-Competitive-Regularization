@@ -4,8 +4,7 @@ import time
 import torch
 import torch.autograd as autograd
 
-from cgd_utils import conjugate_gradient, Hvp_vec, general_conjugate_gradient, Hvpvec, \
-    mgeneral_conjugate_gradient, zero_grad
+from cgd_utils import conjugate_gradient, Hvp_vec, general_conjugate_gradient, zero_grad
 
 
 class BCGD(object):
@@ -260,9 +259,9 @@ class ACGD(object):  # Support multi GPU
         scaled_grad_x = torch.mul(lr_x, grad_x_vec).detach()  # lr_x * grad_x
         scaled_grad_y = torch.mul(lr_y, grad_y_vec).detach()  # lr_y * grad_y
         hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, scaled_grad_y,
-                           retain_graph=True)  # D_xy * lr_y * grad_y
+                            retain_graph=True)  # D_xy * lr_y * grad_y
         hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, scaled_grad_x,
-                           retain_graph=True)  # D_yx * lr_x * grad_x
+                            retain_graph=True)  # D_yx * lr_x * grad_x
 
         p_x = torch.add(grad_x_vec, - hvp_x_vec).detach_()  # grad_x - D_xy * lr_y * grad_y
         p_y = torch.add(grad_y_vec, hvp_y_vec).detach_()  # grad_y + D_yx * lr_x * grad_x
@@ -276,13 +275,13 @@ class ACGD(object):  # Support multi GPU
             # p_y_norm = p_y.norm(p=2).detach_()
             # if self.old_y is not None:
             #     self.old_y = self.old_y / p_y_norm
-            cg_y, self.iter_num = mgeneral_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                              x_params=self.min_params,
-                                                              y_params=self.max_params, b=p_y,
-                                                              x=self.old_y,
-                                                              nsteps=p_y.shape[0] // 10000,
-                                                              lr_x=lr_y, lr_y=lr_x,
-                                                              device=self.device)
+            cg_y, self.iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                                                             x_params=self.min_params,
+                                                             y_params=self.max_params, b=p_y,
+                                                             x=self.old_y,
+                                                             nsteps=p_y.shape[0] // 10000,
+                                                             lr_x=lr_y, lr_y=lr_x,
+                                                             device=self.device)
             # cg_y.mul_(p_y_norm)
             cg_y.detach_().mul_(- lr_y.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y, retain_graph=True).add_(
@@ -295,13 +294,13 @@ class ACGD(object):  # Support multi GPU
             # p_x_norm = p_x.norm(p=2).detach_()
             # if self.old_x is not None:
             #     self.old_x = self.old_x / p_x_norm
-            cg_x, self.iter_num = mgeneral_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                              x_params=self.max_params,
-                                                              y_params=self.min_params, b=p_x,
-                                                              x=self.old_x,
-                                                              nsteps=p_x.shape[0] // 10000,
-                                                              lr_x=lr_x, lr_y=lr_y,
-                                                              device=self.device)
+            cg_x, self.iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                                                             x_params=self.max_params,
+                                                             y_params=self.min_params, b=p_x,
+                                                             x=self.old_x,
+                                                             nsteps=p_x.shape[0] // 10000,
+                                                             lr_x=lr_x, lr_y=lr_y,
+                                                             device=self.device)
             # cg_x.detach_().mul_(p_x_norm)
             cg_x.detach_().mul_(lr_x.sqrt())  # delta x = lr_x.sqrt() * cg_x
             hcg = Hvp_vec(grad_x_vec, self.min_params, cg_x, retain_graph=True).add_(
