@@ -14,16 +14,10 @@ class BCGD(object):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr': lr, 'momentum': momentum, 'solve_x': solve_x,
-                      'step': 0,'old_max': None, 'old_min': None, # start point of CG
-                      'exp_avg_max': 0.0, 'exp_avg_min': 0.0} # save last update
-        # self.lr = lr
-        # self.momentum = momentum
+                      'step': 0,'old_max': None, 'old_min': None,  # start point of CG
+                      'exp_avg_max': 0.0, 'exp_avg_min': 0.0}  # save last update
         self.device = device
-        # self.solve_x = solve_x
         self.collect_info = collect_info
-
-        # self.old_x = None
-        # self.old_y = None
 
     def zero_grad(self):
         zero_grad(self.max_params)
@@ -37,6 +31,12 @@ class BCGD(object):
             raise ValueError(
                 'No update information stored. Set collect_info=True before call this method')
 
+    def state_dict(self):
+        return self.state
+
+    def load_state_dict(self, state_dict):
+        self.state.update(state_dict)
+
     def step(self, loss):
         lr = self.state['lr']
         solve_x = self.state['solve_x']
@@ -47,14 +47,15 @@ class BCGD(object):
         grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
         grad_y = autograd.grad(loss, self.min_params, create_graph=True, retain_graph=True)
         grad_y_vec = torch.cat([g.contiguous().view(-1) for g in grad_y])
-
-        hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, grad_y_vec,
+        grad_x_vec_d = grad_x_vec.clone().detach()
+        grad_y_vec_d = grad_y_vec.clone().detach()
+        hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, grad_y_vec_d,
                             retain_graph=True)  # h_xy * d_y
-        hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, grad_x_vec,
+        hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, grad_x_vec_d,
                             retain_graph=True)  # h_yx * d_x
 
-        p_x = torch.add(grad_x_vec, - lr * hvp_x_vec)
-        p_y = torch.add(grad_y_vec, lr * hvp_y_vec)
+        p_x = torch.add(grad_x_vec_d, - lr * hvp_x_vec).detach_()
+        p_y = torch.add(grad_y_vec_d, lr * hvp_y_vec).detach_()
         if self.collect_info:
             self.norm_px = torch.norm(p_x, p=2)
             self.norm_py = torch.norm(p_y, p=2)
@@ -66,16 +67,16 @@ class BCGD(object):
                                                      y_params=self.max_params, b=p_y, x=self.state['old_min'],
                                                      nsteps=p_y.shape[0] // 1000,
                                                      lr_x=lr, lr_y=lr, device=self.device)
-            hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y)
-            cg_x = torch.add(grad_x_vec, - lr * hcg)
+            hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y.detach_()).detach_()
+            cg_x = torch.add(grad_x_vec_d, - lr * hcg)
         else:
             cg_x, self.iter_num = conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
                                                      x_params=self.max_params,
                                                      y_params=self.min_params, b=p_x, x=self.state['old_max'],
                                                      nsteps=p_x.shape[0] // 1000,
                                                      lr_x=lr, lr_y=lr, device=self.device)
-            hcg = Hvp_vec(grad_x_vec, self.min_params, cg_x)
-            cg_y = torch.add(grad_y_vec, lr * hcg)
+            hcg = Hvp_vec(grad_x_vec, self.min_params, cg_x.detach_()).detach_()
+            cg_y = torch.add(grad_y_vec_d, lr * hcg)
         self.state.update({'old_max': cg_x, 'old_min': cg_y})
 
         if self.collect_info:

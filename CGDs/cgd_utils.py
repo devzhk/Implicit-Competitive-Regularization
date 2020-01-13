@@ -1,11 +1,12 @@
 import torch
 import torch.autograd as autograd
-import torch.nn as nn
+import warnings
 
 
 def conjugate_gradient(grad_x, grad_y,
                        x_params, y_params,
-                       b, x=None, nsteps=10, residual_tol=1e-18,
+                       b, x=None, nsteps=10,
+                       tol=1e-12, atol=1e-20,
                        lr_x=1.0, lr_y=1.0, device=torch.device('cpu')):
     '''
     :param grad_x:
@@ -26,7 +27,7 @@ def conjugate_gradient(grad_x, grad_y,
     r = b.clone().detach()
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
-    residual_tol = residual_tol * rdotr
+    residual_tol = tol * rdotr
     for i in range(nsteps):
         # To compute Avp
         h_1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=p, retain_graph=True)
@@ -40,8 +41,10 @@ def conjugate_gradient(grad_x, grad_y,
         beta = new_rdotr / rdotr
         p = r + beta * p
         rdotr = new_rdotr
-        if rdotr < residual_tol:
+        if rdotr < residual_tol or rdotr < atol:
             break
+    if i > 99:
+        warnings.warn('CG iter num: %d' % (i + 1))
     return x, i + 1
 
 
@@ -70,6 +73,10 @@ def Hvpvec(grad_vec, params, vec, retain_graph=False):
 
 
 def Hvp_vec(grad_vec, params, vec, retain_graph=False):
+    if torch.isnan(grad_vec).any():
+        raise ValueError('Gradvec nan')
+    if torch.isnan(vec).any():
+        raise ValueError('vector nan')
     try:
         grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph)
         hvp = torch.cat([g.contiguous().view(-1) for g in grad_grad])
@@ -92,8 +99,10 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
     return hvp
 
 
-def general_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y, x=None, nsteps=10,
-                               residual_tol=1e-16,
+def general_conjugate_gradient(grad_x, grad_y,
+                               x_params, y_params, b,
+                               lr_x, lr_y, x=None, nsteps=10,
+                               tol=1e-12, atol=1e-20,
                                device=torch.device('cpu')):
     '''
 
@@ -119,7 +128,7 @@ def general_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y
     r = b.clone().detach()
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
-    residual_tol = residual_tol * rdotr
+    residual_tol = tol * rdotr
     for i in range(nsteps):
         # To compute Avp
         # h_1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=lr_x * p, retain_graph=True)
@@ -139,13 +148,15 @@ def general_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y
         beta = new_rdotr / rdotr
         p = r + beta * p
         rdotr = new_rdotr
-        if rdotr < residual_tol:
+        if rdotr < residual_tol or rdotr < atol:
             break
     return x, i + 1
 
 
-def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_y, x=None,
-                                nsteps=10, residual_tol=1e-18,
+def mgeneral_conjugate_gradient(grad_x, grad_y,
+                                x_params, y_params, b,
+                                lr_x, lr_y, x=None,
+                                nsteps=10, tol=1e-12, atol=1e-20,
                                 device=torch.device('cpu')):
     '''
 
@@ -171,7 +182,7 @@ def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_
     r = b.clone().detach()
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
-    residual_tol = residual_tol * rdotr
+    residual_tol = tol * rdotr
     for i in range(nsteps):
         # To compute Avp
         # h_1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=lr_x * p, retain_graph=True)
@@ -191,8 +202,10 @@ def mgeneral_conjugate_gradient(grad_x, grad_y, x_params, y_params, b, lr_x, lr_
         beta = new_rdotr / rdotr
         p = r + beta * p
         rdotr = new_rdotr
-        if rdotr < residual_tol or rdotr < 1e-32:
+        if rdotr < residual_tol or rdotr < atol:
             break
+    if i > 99:
+        print('Warning: CG iteration number: %d' % (i + 1))
     return x, i + 1
 
 

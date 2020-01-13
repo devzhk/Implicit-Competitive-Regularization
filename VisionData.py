@@ -1,14 +1,14 @@
 import csv
 import os
 import time
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.utils as vutils
-from tensorboardX import SummaryWriter
+
+from torch.utils.tensorboard import SummaryWriter
 from torch.nn import functional as F
 from torch.optim.rmsprop import RMSprop
 from torch.utils.data import DataLoader
@@ -16,9 +16,12 @@ from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
 from torchvision.models.inception import inception_v3
 
-from models import dc_D, dc_G, dc_d, dc_g, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
-from optimizers import BCGD, ACGD, OCGD
-from cgd_utils import zero_grad
+
+from GANs.models import dc_D, dc_G, dc_d, dc_g, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
+from CGDs.optimizers import BCGD
+from CGDs.cgd_utils import zero_grad
+from utils import prepare_parser
+from metrics.cifar10 import cal_inception_score, cal_fid_score
 
 seed = torch.randint(0, 1000000, (1,))
 # bad seeds: 850527
@@ -39,20 +42,24 @@ def detransform(x):
 def weights_init_d(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.01)
+        nn.init.normal_(m.weight.data, 0.0, 0.005)
 
 
 def weights_init_g(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.01)
+        nn.init.normal_(m.weight.data, 0.0, 0.005)
 
 
 class VisionData():
-    def __init__(self, D, G, device, dataset, z_dim=8, batchsize=256, lr=0.1, show_iter=100,
+    def __init__(self, D, G, device,
+                 dataset, z_dim=8, batchsize=256,
+                 lr_d=0.1, lr_g=0.1, show_iter=100,
                  weight_decay=0.0,
-                 d_penalty=0.0, g_penalty=0.0, noise_shape=(64, 8), gp_weight=10, gpu_num=1):
-        self.lr = lr
+                 d_penalty=0.0, g_penalty=0.0,
+                 noise_shape=(64, 8), gp_weight=10, gpu_num=1):
+        self.lr_d = lr_d
+        self.lr_g = lr_g
         self.batchsize = batchsize
         self.show_iter = show_iter
         self.device = device
@@ -62,12 +69,13 @@ class VisionData():
         self.d_penalty = d_penalty
         self.g_penalty = g_penalty
         self.gp_weight = gp_weight
-        print('learning rate: %.5f \n'
+        print('learning rate d: %.5f \n'
+              'learning rate g: %.5f \n'
               'weight decay: %.5f\n'
               'l2 penalty on discriminator: %.5f\n'
               'l2 penalty on generator: %.5f\n'
               'gradient penalty weight: %.2f'
-              % (self.lr, self.weight_decay, self.d_penalty, self.g_penalty, self.gp_weight))
+              % (self.lr_d, self.lr_g, self.weight_decay, self.d_penalty, self.g_penalty, self.gp_weight))
         self.dataset = dataset
         self.dataloader = DataLoader(dataset=self.dataset, batch_size=self.batchsize, shuffle=True,
                                      num_workers=2, drop_last=True)
@@ -153,14 +161,36 @@ class VisionData():
             print('load Generator from %s' % chkpt_path)
         # print('load models from %s' % chkpt_path)
 
-    def save_checkpoint(self, path, dataset):
-        chk_name = './checkpoints/%.5f%s-%.4f/' % (self.d_penalty, dataset, self.lr)
+    def save_checkpoint(self, path, dataset,
+                        d_optim=None, g_optim=None):
+        chk_name = './checkpoints/%.5f%s-%.4f/' % (self.d_penalty, dataset, self.lr_d)
         if not os.path.exists(chk_name):
             os.makedirs(chk_name)
-        torch.save({
-            'D': self.D.state_dict(),
-            'G': self.G.state_dict(),
-        }, chk_name + path)
+
+        try:
+            d_state_dict = self.D.module.state_dict()
+            g_state_dict = self.G.module.state_dict()
+        except AttributeError:
+            d_state_dict = self.D.state_dict()
+            g_state_dict = self.G.state_dict()
+        if d_optim is not None and g_optim is not None:
+            torch.save({
+                'D': d_state_dict,
+                'G': g_state_dict,
+                'D_optim': d_optim,
+                'G_optim': g_optim
+            }, chk_name + path)
+        elif d_optim is not None:
+            torch.save({
+                'D':d_state_dict,
+                'G': g_state_dict,
+                'ACGD': d_optim
+            }, chk_name + path)
+        else:
+            torch.save({
+                'D': d_state_dict,
+                'G': g_state_dict
+            }, chk_name + path)
         print('save models at %s' % chk_name + path)
 
     def writer_init(self, logname, comments):
@@ -168,11 +198,11 @@ class VisionData():
         current_time = datetime.now().strftime('%b%d_%H-%M-%S')
         path = ('logs/%s/' % logname) + current_time + '_' + comments
         self.writer = SummaryWriter(logdir=path)
-        feildnames = ['iter', 'is_mean', 'is_std', 'time', 'gradient calls']
-        f = open(path + '/inception_score.csv', 'w')
-        self.iswriter = csv.DictWriter(f, feildnames)
+        feildnames = ['iter', 'is_mean', 'is_std', 'FID score','time', 'gradient calls']
+        self.f = open(path + '/metrics.csv', 'w')
+        self.iswriter = csv.DictWriter(self.f, feildnames)
 
-    def show_info(self, timer, D_loss=None, G_loss=None):
+    def show_info(self, timer, logdir, D_loss=None, G_loss=None):
         if G_loss is not None:
             print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
             self.count, D_loss.item(), G_loss.item(), timer))
@@ -185,6 +215,10 @@ class VisionData():
         try:
             self.writer.add_images('Generated images', fake_data, global_step=self.count,
                                    dataformats='NCHW')
+            path = 'figs/%s/' % logdir
+            if not os.path.exists(path):
+                os.makedirs(path)
+            vutils.save_image(fake_data, path + 'iter_%d.png' % self.count)
         except Exception as e:
             print(type(e))
             print('Fail to plot')
@@ -227,21 +261,24 @@ class VisionData():
 
         self.writer.add_scalars('weight', {'D params': wd, 'G params': wg.item()}, self.count)
 
-    def train_gd(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST', loss_type='JSD'):
+    def train_gd(self, is_flag, fid_flag,
+                 epoch_num, mode='Adam',
+                 dataname='MNIST', logname='MNIST',
+                 loss_type='JSD'):
         print(mode)
         if mode == 'SGD':
-            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
         elif mode == 'Adam':
-            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr,
+            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr_d,
                                      weight_decay=self.weight_decay, betas=(0.5, 0.999))
-            g_optimizer = optim.Adam(self.G.parameters(), lr=self.lr,
+            g_optimizer = optim.Adam(self.G.parameters(), lr=self.lr_g,
                                      weight_decay=self.weight_decay, betas=(0.5, 0.999))
         elif mode == 'RMSProp':
-            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            g_optimizer = RMSprop(self.G.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            g_optimizer = RMSprop(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
         self.writer_init(logname=logname,
-                         comments='%s-%.3f_%.5f' % (mode, self.lr, self.weight_decay))
+                         comments='%s-%.3f_%.5f' % (mode, self.lr_d, self.weight_decay))
         self.iswriter.writeheader()
         timer = time.time()
         start = time.time()
@@ -289,37 +326,58 @@ class VisionData():
                 self.plot_d(d_real, d_fake)
 
                 if self.count % self.show_iter == 0:
-                    self.show_info(timer=time.time() - timer, D_loss=D_loss, G_loss=G_loss)
+                    self.show_info(timer=time.time() - timer, D_loss=D_loss, G_loss=G_loss, logdir=logname)
                     timer = time.time()
                 self.count += 1
-                if self.count % 2000 == 0:
-                    is_mean, is_std = self.get_inception_score(batch_num=500)
-                    print(is_mean, is_std)
-                    self.iswriter.writerow(
-                        {'iter': self.count, 'is_mean': is_mean, 'is_std': is_std,
-                         'time': time.time() - start})
-                    self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr, self.count),
-                                         dataset=dataname)
+                if self.count % 4000 == 0:
+                    content = {'iter': self.count,
+                               'time': time.time() - start,
+                               'gradient calls': 2}
+                    if is_flag:
+                        inception_score = cal_inception_score(G=self.G, device=self.device, z_dim=self.z_dim)
+                        np.set_printoptions(precision=4)
+                        print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
+                        content.update({'is_mean': inception_score[0],
+                                        'is_std': inception_score[1]})
+                        self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
+                    if fid_flag:
+                        fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
+                        np.set_printoptions(precision=4)
+                        print('FID score: {}'.format(fid_score))
+                        content.update({'FID score': fid_score})
+                        self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
+                    self.iswriter.writerow(content)
+                    self.f.flush()
+                    self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname,
+                                         d_optim=d_optimizer.state_dict(), g_optim=g_optimizer.state_dict())
         self.writer.close()
-        self.save_checkpoint('DIM64%s-%.5f_%d.pth' % (mode, self.lr, self.count), dataset=dataname)
+        self.save_checkpoint('DIM64%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname,
+                             d_optim=d_optimizer.state_dict(), g_optim=g_optimizer.state_dict())
 
-    def train_bcgd(self, epoch_num=100, mode='BCGD', collect_info=False, dataname='CIFAR',
-                   logname='CIFAR', loss_type='JSD'):
+    def train_bcgd(self, is_flag=False, fid_flag=False,
+                   epoch_num=100, mode='BCGD', collect_info=False,
+                   dataname='CIFAR', logname='CIFAR',
+                   loss_type='JSD'):
         timer = time.time()
         start = time.time()
-        is_lsit = []
         if collect_info:
             self.writer_init(logname=logname, comments='%s-%.4fDP%.4fGP%.4f%.5f' % (
-            mode, self.lr, self.d_penalty, self.g_penalty, self.weight_decay))
+            mode, self.lr_d, self.d_penalty, self.g_penalty, self.weight_decay))
             self.iswriter.writeheader()
         if mode == 'BCGD':
             optimizer = BCGD(max_params=self.G.parameters(),
-                             min_params=self.D.parameters(), lr=self.lr,
-                             weight_decay=self.weight_decay, device=self.device, solve_x=False,
+                             min_params=self.D.parameters(),
+                             lr=self.lr_g,
+                             momentum=self.momentum, device=self.device, solve_x=False,
                              collect_info=collect_info)
-        elif mode == 'ACGD':
-            optimizer = ACGD(max_params=self.G.parameters(), min_params=self.D.parameters(), lr=self.lr, device=self.device,
-                             solve_x=False, collect_info=collect_info)
+        # elif mode == 'ACGD':
+        #     optimizer = ACGD(max_params=self.G, min_params=self.D,
+        #                      lr=self.lr_d, device=self.device, eps=1e-5,
+        #                      solve_x=False, collect_info=collect_info)
+        # elif mode == 'ACGD2':
+        #     optimizer = ACGD2(max_params=self.G, min_params=self.D,
+        #                      lr=self.lr_d, device=self.device, eps=1e-5,
+        #                      solve_x=False, collect_info=collect_info)
         for e in range(epoch_num):
             for real_x in self.dataloader:
                 real_x = real_x[0].to(self.device)
@@ -342,7 +400,7 @@ class VisionData():
                 iter_num = -1
                 if self.count % self.show_iter == 0:
                     if collect_info:
-                        self.show_info(D_loss=loss, timer=time.time() - timer)
+                        self.show_info(timer=time.time() - timer, logdir=logname, D_loss=loss)
                         timer = time.time()
                         self.plot_d(d_real, d_fake)
                     else:
@@ -358,37 +416,46 @@ class VisionData():
                     self.writer.add_scalars('CG running time', {'A ** -1 * b': time_cg}, self.count)
 
                 self.count += 1
-                if self.count % 5000 == 0:
-                    is_mean, is_std = self.get_inception_score(batch_num=500)
-                    is_lsit.append(is_mean)
-                    print('inception score- mean: {}, std: {}'.format(is_mean, is_std))
-                    if collect_info:
-                        self.iswriter.writerow(
-                            {'iter': self.count, 'is_mean': is_mean, 'is_std': is_std,
-                             'time': time.time() - start, 'gradient calls': 2 * iter_num + 4})
-        self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr, self.count), dataset=dataname)
-        len_list = len(is_lsit)
-        plt.plot(np.arange(len_list) * 5, is_lsit)
-        plt.ylabel('Inception score')
-        plt.xlabel('iteration(k)')
-        plt.show()
+                if self.count % 4000 == 0:
+                    content = {'iter': self.count,
+                               'time': time.time() - start,
+                               'gradient calls': 2 * iter_num + 4}
+                    if is_flag:
+                        inception_score = cal_inception_score(G=self.G, device=self.device, z_dim=self.z_dim)
+                        np.set_printoptions(precision=4)
+                        print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
+                        content.update({'is_mean': inception_score[0],
+                                        'is_std': inception_score[1]})
+                        self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
+                    if fid_flag:
+                        fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
+                        np.set_printoptions(precision=4)
+                        print('FID score: {}'.format(fid_score))
+                        content.update({'FID score': fid_score})
+                        self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
+                    self.iswriter.writerow(content)
+                    self.f.flush()
+                    self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname)
+        self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname)
+        self.f.close()
+
 
     def train_d(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
         print(mode)
         if mode == 'SGD':
-            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
             self.writer_init(logname=logname,
-                             comments='SGD-%.3f_%.5f' % (self.lr, self.weight_decay))
+                             comments='SGD-%.3f_%.5f' % (self.lr_d, self.weight_decay))
         elif mode == 'Adam':
-            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr,
+            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr_d,
                                      weight_decay=self.weight_decay,
                                      betas=(0.5, 0.999))
             self.writer_init(logname=logname,
-                             comments='ADAM-%.3f_%.5f' % (self.lr, self.weight_decay))
+                             comments='ADAM-%.3f_%.5f' % (self.lr_d, self.weight_decay))
         elif mode == 'RMSProp':
-            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
             self.writer_init(logname=logname,
-                             comments='RMSProp-%.3f_%.5f' % (self.lr, self.weight_decay))
+                             comments='RMSProp-%.3f_%.5f' % (self.lr_d, self.weight_decay))
         timer = time.time()
         for e in range(epoch_num):
             for real_x in self.dataloader:
@@ -535,15 +602,15 @@ class VisionData():
         self.save_checkpoint('sfixD%s-%.5f_%d.pth' % (mode, self.lr, self.count), dataset=dataname)
 
     def train_ocgd(self, epoch_num, update_D, collect_info=True, dataname='MNIST', logname='MNIST'):
-        timer = time.time()
+        timer = time.time() #TODO oneside CGD
         self.writer_init(logname=logname, comments='%.4fDP%.4fGP%.4f%.5f' % (
-        self.lr, self.d_penalty, self.g_penalty, self.weight_decay))
+        self.lr_d, self.d_penalty, self.g_penalty, self.weight_decay))
         if update_D:
-            optimizer = OCGD(max_params=list(self.G.parameters()),
+            optimizer = BCGD(max_params=list(self.G.parameters()),
                              min_params=list(self.D.parameters()), update_min=update_D,
                              device=self.device, collect_info=True)
         else:
-            optimizer = OCGD(max_params=list(self.D.parameters()),
+            optimizer = BCGD(max_params=list(self.D.parameters()),
                              min_params=list(self.G.parameters()), update_min=True,
                              device=self.device, collect_info=True)
         for e in range(epoch_num):
@@ -608,7 +675,6 @@ def train_mnist():
 
 
 def train_cifar():
-    # good seeds: 343060
     modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
@@ -628,43 +694,52 @@ def train_cifar():
     # trainer.train_gd(epoch_num=100, mode=modes[2], dataname='CIFAR10', logname='CIFAR10')
 
 
-def train_wgan():
-    # bad seed: 820643
-    # good seed: 778221 497435
+def train_wgan(config):
     modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
     print('CIFAR10')
-    learning_rate = 0.0001
-    batch_size = 64
-    z_dim = 128
-    dropout = None
-    # Dropout: None or 0.5
-    if dropout is not None:
+    if config['dropout']:
         print('dropout!')
-        D = GoodDiscriminatord(dropout=dropout)
+        D = GoodDiscriminatord()
     else:
         D = GoodDiscriminator()
     G = GoodGenerator()
     dataset = CIFAR10(root='datas/cifar10', download=True, train=True, transform=transform)
-    trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim,
-                         batchsize=batch_size, lr=learning_rate,
-                         show_iter=500, weight_decay=0.0, d_penalty=0.0001, g_penalty=0,
-                         noise_shape=(64, z_dim), gp_weight=0)
+    trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=config['z_dim'],
+                         batchsize=config['batchsize'],
+                         lr_d=config['lr_d'], lr_g=config['lr_g'],
+                         show_iter=config['show_iter'], weight_decay=0.0,
+                         d_penalty=config['d_penalty'], g_penalty=0,
+                         noise_shape=(64, config['z_dim']), gp_weight=config['gp_weight'])
     # d_penalty: L2 penalty on discriminator;
     # gp_weight: gradient penalty weight
     # trainer.load_checkpoint(chkpt_path='')
-    trainer.train_bcgd(epoch_num=900, mode='ACGD', collect_info=True, dataname='CIFAR10-WGAN',
-                       logname='CIFAR10-WGAN', loss_type='WGAN')
+    if config['optimizer'] == 'ACGD' or config['optimizer'] == 'BCGD' or config['optimizer'] == 'ACGD2':
+        trainer.train_bcgd(is_flag=config['eval_is'], fid_flag=config['eval_fid'],
+                           epoch_num=config['epoch_num'], mode=config['optimizer'],
+                           collect_info=config['collect_info'],
+                           dataname=config['dataset'],
+                           logname=config['logdir'],
+                           loss_type=config['loss_type'])
+    else:
+        trainer.train_gd(is_flag=config['eval_is'], fid_flag=config['eval_fid'],
+                         epoch_num=config['epoch_num'], mode=config['optimizer'],
+                         dataname=config['dataset'], logname=config['logdir'],
+                         loss_type=config['loss_type'])
     # Loss type: JSD, WGAN
     # trainer.train_bcgd(epoch_num=120, mode='ACGD', collect_info=True, dataname='CIFAR10-WGAN', logname='CIFAR10-WGAN', loss_type='WGAN')
 
     # trainer.train_gd(epoch_num=600, mode=modes[3], dataname='CIFAR10-JSD', logname='CIFAR10-JSD', loss_type='JSD')
     # uncomment to train GAN with Adam
-
+    # 595605 to reproduce
 
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
+    parser = prepare_parser()
+    config = vars(parser.parse_args())
+    print(config)
+    train_wgan(config)
     # train_mnist()
     # train_cifar()
-    train_wgan()
+

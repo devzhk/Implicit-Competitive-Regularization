@@ -12,7 +12,7 @@ from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from torchvision.models.inception import inception_v3
 
-from models import GoodGenerator, GoodDiscriminator
+from GANs.models import GoodGenerator, GoodDiscriminator
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
