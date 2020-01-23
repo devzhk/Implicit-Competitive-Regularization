@@ -1,59 +1,64 @@
 import csv
-import os
 import time
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
+from torch.optim import SGD, Adam
 import torchvision.utils as vutils
 
 from tensorboardX import SummaryWriter
-from torch.nn import functional as F
-from torch.optim.rmsprop import RMSprop
 from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.datasets import CIFAR10, MNIST
 
-from GANs.models import dc_D, dc_G, dc_d, dc_g, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
 from CGDs.optimizers import BCGD
-from CGDs.cgd_utils import zero_grad
 from utils import prepare_parser
+from train_utils import data_model, save_checkpoint, detransform, \
+    weights_init_d, weights_init_g
+from losses import get_loss
+
 
 seed = torch.randint(0, 1000000, (1,))
 torch.manual_seed(seed=seed)
 print('random seed : %d' % seed)
 
 
-def detransform(x):
-    return (x + 1.0) / 2.0
+def update_g(D, G, optimizer,
+             batchsize, config, device):
+    z = torch.randn((batchsize, config['z_dim']), device=device)
+    d_fake = D(G(z))
+    loss = get_loss(name=config['loss_type'], train_g=True,
+                    d_fake=d_fake)
 
 
-def weights_init_d(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.005)
+
+def update_d(real_x, D, G, optimizer,
+             config, device):
+    z = torch.randn((real_x.shape[0], config['z_dim']), device=device)
+    fake_x = G(z).detach()
+    d_real = D(real_x)
+    d_fake = D(fake_x)
+    loss = get_loss(name=config['loss_type'], train_g=False,
+                    d_real=d_real, d_fake=d_fake)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    return loss, d_real.mean().item(), d_fake.mean().item()
 
 
-def weights_init_g(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.005)
+def train_seq(epoch_num, config,
+              D, G, dataloader, device):
+    mode = config['optimizer']
+    if mode == 'Adam':
+        optimizer_d = Adam(D.parameters(), lr=config['lr_d'], betas=(0.5, 0.999))
+        optimizer_g = Adam(G.parameters(), lr=config['lr_g'], betas=(0.5, 0.999))
+    elif mode == 'SGD':
+        optimizer_d = SGD(D.parameters(), lr=config['lr_d'])
+        optimizer_g = SGD(G.parameters(), lr=config['lr_g'])
+    for e in range(epoch_num):
+        for real_x in dataloader:
+            real_x = real_x[0].to(device)
 
 
-def save_checkpoint(path, name, optimizer, D, G):
-    chk_name = 'checkpoints/' + path
-    if not os.path.exists(chk_name):
-        os.makedirs(chk_name)
-    d_state_dict = D.state_dict()
-    g_state_dict = G.state_dict()
-    optim_dict = optimizer.state_dict()
-    torch.save({
-        'D': d_state_dict,
-        'G': g_state_dict,
-        'optim': optim_dict
-    }, chk_name + name)
-    print('model is saved at %s' % chk_name + name)
 
 
 if __name__ == '__main__':
@@ -63,41 +68,31 @@ if __name__ == '__main__':
     config = vars(parser.parse_args())
     print(config)
 
-    if config['dataset'] == 'CIFAR10':
-        dataset = CIFAR10(config['datapath'], train=True,
-                          transform=transforms.Compose([transforms.ToTensor(),
-                                                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                                        ]),
-                          download=True)
-        D = GoodDiscriminator().to(device)
-        G = GoodGenerator().to(device)
-        fixed_noise = torch.randn((64, config['z_dim']), device=device)
-    else:
-        dataset = MNIST(config['datapath'], train=True,
-                        transform=transforms.Compose([transforms.ToTensor(),
-                                                      transforms.Normalize(0.5, 0.5)
-                                                      ]),
-                        download=True)
-        D = dc_D()
-        G = dc_G(z_dim=config['z_dim'])
-
+    dataset, D, G = data_model(config)
+    D = D.to(device)
+    G = G.to(device)
+    D.apply(weights_init_d)
+    G.apply(weights_init_g)
 
     if config['gpu_num'] > 1:
         D = nn.DataParallel(D, list(range(config['gpu_num'])))
         G = nn.DataParallel(G, list(range(config['gpu_num'])))
-    D.apply(weights_init_d)
-    G.apply(weights_init_g)
+    fixed_noise = torch.randn((64, config['z_dim']), device=device)
+
     dataloader = DataLoader(dataset=dataset, batch_size=config['batchsize'], shuffle=True, num_workers=4)
     writer = SummaryWriter(log_dir='logs/' + config['logdir'])
     # f = open(config['logdir'] + '/scores.csv', 'w')
     # score_writer = csv.DictWriter(f, ['iter_num', 'is_mean', 'is_std'])
     iter_num = 0
     criterion = nn.BCEWithLogitsLoss()
+    mode = config['optimizer']
 
-    if config['optimizer'] == 'BCGD':
+    if mode == 'BCGD':
         optimizer = BCGD(max_params=G.parameters(), min_params=D.parameters(),
                          lr=config['lr_d'], momentum=config['momentum'],
                          device=device, collect_info=config['collect_info'])
+    else:
+        optimizer_d = Adam(params=D.parameters())
 
     for e in range(config['epoch_num']):
         for real_x in dataloader:

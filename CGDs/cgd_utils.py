@@ -73,29 +73,25 @@ def Hvpvec(grad_vec, params, vec, retain_graph=False):
 
 
 def Hvp_vec(grad_vec, params, vec, retain_graph=False):
+    '''
+    return Hessian vector product
+    '''
     if torch.isnan(grad_vec).any():
         raise ValueError('Gradvec nan')
     if torch.isnan(vec).any():
         raise ValueError('vector nan')
-    try:
-        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph)
-        hvp = torch.cat([g.contiguous().view(-1) for g in grad_grad])
-        if torch.isnan(hvp).any():
-            print('hvp nan')
-            raise ValueError('hvp Nan')
-    except:
         # print('filling zero for None')
-        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph,
-                                  allow_unused=True)
-        grad_list = []
-        for i, p in enumerate(params):
-            if grad_grad[i] is None:
-                grad_list.append(torch.zeros_like(p))
-            else:
-                grad_list.append(grad_grad[i].contiguous().view(-1))
-        hvp = torch.cat(grad_list)
-        if torch.isnan(hvp).any():
-            raise ValueError('hvp Nan')
+    grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph,
+                              allow_unused=True)
+    grad_list = []
+    for i, p in enumerate(params):
+        if grad_grad[i] is None:
+            grad_list.append(torch.zeros_like(p))
+        else:
+            grad_list.append(grad_grad[i].contiguous().view(-1))
+    hvp = torch.cat(grad_list)
+    if torch.isnan(hvp).any():
+        raise ValueError('hvp Nan')
     return hvp
 
 

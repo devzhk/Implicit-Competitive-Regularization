@@ -37,6 +37,9 @@ class BCGD(object):
     def load_state_dict(self, state_dict):
         self.state.update(state_dict)
 
+    def set_lr(self, lr):
+        self.state.update({'lr': lr})
+
     def step(self, loss):
         lr = self.state['lr']
         solve_x = self.state['solve_x']
@@ -57,15 +60,15 @@ class BCGD(object):
         p_x = torch.add(grad_x_vec_d, - lr * hvp_x_vec).detach_()
         p_y = torch.add(grad_y_vec_d, lr * hvp_y_vec).detach_()
         if self.collect_info:
-            self.norm_px = torch.norm(p_x, p=2)
-            self.norm_py = torch.norm(p_y, p=2)
+            self.norm_px = torch.norm(hvp_x_vec, p=2)
+            self.norm_py = torch.norm(hvp_y_vec, p=2)
             self.timer = time.time()
 
         if solve_x:
             cg_y, self.iter_num = conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
                                                      x_params=self.min_params,
                                                      y_params=self.max_params, b=p_y, x=self.state['old_min'],
-                                                     nsteps=p_y.shape[0] // 1000,
+                                                     nsteps=p_y.shape[0],
                                                      lr_x=lr, lr_y=lr, device=self.device)
             hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y.detach_()).detach_()
             cg_x = torch.add(grad_x_vec_d, - lr * hcg)
@@ -73,7 +76,7 @@ class BCGD(object):
             cg_x, self.iter_num = conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
                                                      x_params=self.max_params,
                                                      y_params=self.min_params, b=p_x, x=self.state['old_max'],
-                                                     nsteps=p_x.shape[0] // 1000,
+                                                     nsteps=p_x.shape[0],
                                                      lr_x=lr, lr_y=lr, device=self.device)
             hcg = Hvp_vec(grad_x_vec, self.min_params, cg_x.detach_()).detach_()
             cg_y = torch.add(grad_y_vec_d, lr * hcg)
