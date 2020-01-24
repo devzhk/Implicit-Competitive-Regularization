@@ -111,3 +111,4 @@ class BCGD(object):
             self.norm_cgx = torch.norm(cg_x, p=2)
             self.norm_cgy = torch.norm(cg_y, p=2)
         self.state['solve_x'] = False if solve_x else True
+

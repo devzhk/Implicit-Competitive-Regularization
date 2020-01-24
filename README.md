@@ -12,7 +12,7 @@ Copy `optimizers.py` and `cgd_utils.py` to your directory.
 ```python
 import torch
 torch.backends.cudnn.benchmark = True
-from optimizers import ACGD
+from CGDs import ACGD
 device = torch.device('cuda:0')
 lr = 0.0001
 G = Generator()

@@ -1,27 +1,19 @@
-import csv
 import os
 import time
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.utils as vutils
 
-from torch.utils.tensorboard import SummaryWriter
-from torch.nn import functional as F
+from tensorboardX import SummaryWriter
 from torch.optim.rmsprop import RMSprop
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import CIFAR10, MNIST
-from torchvision.models.inception import inception_v3
+from torchvision.datasets import MNIST
 
+from GANs.models import dc_D, dc_G
 
-from GANs.models import dc_D, dc_G, dc_d, dc_g, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
-from CGDs.optimizers import BCGD
 from CGDs.cgd_utils import zero_grad
-from utils import prepare_parser
-from metrics.cifar10 import cal_inception_score, cal_fid_score
 
 seed = torch.randint(0, 1000000, (1,))
 # bad seeds: 850527
@@ -92,52 +84,10 @@ class VisionData():
         self.criterion = nn.BCEWithLogitsLoss()
         self.fixed_noise = torch.randn(noise_shape, device=device)
 
-    def load(self, path):
-        checkpoints = torch.load(path)
-        self.D.load_state_dict(checkpoints['D'])
-        self.G.load_state_dict(checkpoints['G'])
-
-    def gradient_penalty(self, real_x, fake_x):
-        alpha = torch.randn((self.batchsize, 1, 1, 1), device=self.device)
-        alpha = alpha.expand_as(real_x)
-        interploted = alpha * real_x.data + (1.0 - alpha) * fake_x.data
-        interploted.requires_grad = True
-        interploted_d = self.D(interploted)
-        gradients = torch.autograd.grad(outputs=interploted_d, inputs=interploted,
-                                        grad_outputs=torch.ones(interploted_d.size(),
-                                                                device=self.device),
-                                        create_graph=True, retain_graph=True)[0]
-        gradients = gradients.view(self.batchsize, -1)
-        self.writer.add_scalars('Gradients',
-                                {'D gradient L2norm': gradients.norm(p=2, dim=1).mean().item()},
-                                self.count)
-        gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
-        return self.gp_weight * ((gradients_norm - 1.0) ** 2).mean()
-
     def generate_data(self):
         z = torch.randn((self.batchsize, self.z_dim), device=self.device)
         data = self.G(z)
         return data
-
-    def get_inception_score(self, batch_num, splits_num=10):
-        net = inception_v3(pretrained=True, transform_input=False).eval().to(self.device)
-        resize_module = nn.Upsample(size=(299, 299), mode='bilinear', align_corners=True).to(
-            self.device)
-        preds = np.zeros((self.batchsize * batch_num, 1000))
-        for e in range(batch_num):
-            imgs = resize_module(self.generate_data())
-            with torch.no_grad():
-                pred = F.softmax(net(imgs), dim=1).data.cpu().numpy()
-            preds[e * self.batchsize: e * self.batchsize + self.batchsize] = pred
-        split_score = []
-        chunk_size = preds.shape[0] // splits_num
-        for k in range(splits_num):
-            pred_chunk = preds[k * chunk_size: k * chunk_size + chunk_size, :]
-            kl_score = pred_chunk * (
-                        np.log(pred_chunk) - np.log(np.expand_dims(np.mean(pred_chunk, 0), 0)))
-            kl_score = np.mean(np.sum(kl_score, 1))
-            split_score.append(np.exp(kl_score))
-        return np.mean(split_score), np.std(split_score)
 
     def l2penalty(self):
         p_d = 0
@@ -198,9 +148,6 @@ class VisionData():
         current_time = datetime.now().strftime('%b%d_%H-%M-%S')
         path = ('logs/%s/' % logname) + current_time + '_' + comments
         self.writer = SummaryWriter(logdir=path)
-        feildnames = ['iter', 'is_mean', 'is_std', 'FID score','time', 'gradient calls']
-        self.f = open(path + '/metrics.csv', 'w')
-        self.iswriter = csv.DictWriter(self.f, feildnames)
 
     def show_info(self, timer, logdir, D_loss=None, G_loss=None):
         if G_loss is not None:
@@ -261,8 +208,7 @@ class VisionData():
 
         self.writer.add_scalars('weight', {'D params': wd, 'G params': wg.item()}, self.count)
 
-    def train_gd(self, is_flag, fid_flag,
-                 epoch_num, mode='Adam',
+    def train_gd(self, epoch_num, mode='Adam',
                  dataname='MNIST', logname='MNIST',
                  loss_type='JSD'):
         print(mode)
@@ -279,9 +225,7 @@ class VisionData():
             g_optimizer = RMSprop(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
         self.writer_init(logname=logname,
                          comments='%s-%.3f_%.5f' % (mode, self.lr_d, self.weight_decay))
-        self.iswriter.writeheader()
         timer = time.time()
-        start = time.time()
         for e in range(epoch_num):
             for real_x in self.dataloader:
                 real_x = real_x[0].to(self.device)
@@ -328,117 +272,10 @@ class VisionData():
                 if self.count % self.show_iter == 0:
                     self.show_info(timer=time.time() - timer, D_loss=D_loss, G_loss=G_loss, logdir=logname)
                     timer = time.time()
-                self.count += 1
-                if self.count % 4000 == 0:
-                    content = {'iter': self.count,
-                               'time': time.time() - start,
-                               'gradient calls': 2}
-                    if is_flag:
-                        inception_score = cal_inception_score(G=self.G, device=self.device, z_dim=self.z_dim)
-                        np.set_printoptions(precision=4)
-                        print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
-                        content.update({'is_mean': inception_score[0],
-                                        'is_std': inception_score[1]})
-                        self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
-                    if fid_flag:
-                        fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
-                        np.set_printoptions(precision=4)
-                        print('FID score: {}'.format(fid_score))
-                        content.update({'FID score': fid_score})
-                        self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
-                    self.iswriter.writerow(content)
-                    self.f.flush()
                     self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname,
                                          d_optim=d_optimizer.state_dict(), g_optim=g_optimizer.state_dict())
-        self.writer.close()
-        self.save_checkpoint('DIM64%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname,
-                             d_optim=d_optimizer.state_dict(), g_optim=g_optimizer.state_dict())
-
-    def train_bcgd(self, is_flag=False, fid_flag=False,
-                   epoch_num=100, mode='BCGD', collect_info=False,
-                   dataname='CIFAR', logname='CIFAR',
-                   loss_type='JSD'):
-        timer = time.time()
-        start = time.time()
-        if collect_info:
-            self.writer_init(logname=logname, comments='%s-%.4fDP%.4fGP%.4f%.5f' % (
-            mode, self.lr_d, self.d_penalty, self.g_penalty, self.weight_decay))
-            self.iswriter.writeheader()
-        if mode == 'BCGD':
-            optimizer = BCGD(max_params=self.G.parameters(),
-                             min_params=self.D.parameters(),
-                             lr=self.lr_g,
-                             momentum=self.momentum, device=self.device, solve_x=False,
-                             collect_info=collect_info)
-        # elif mode == 'ACGD':
-        #     optimizer = ACGD(max_params=self.G, min_params=self.D,
-        #                      lr=self.lr_d, device=self.device, eps=1e-5,
-        #                      solve_x=False, collect_info=collect_info)
-        # elif mode == 'ACGD2':
-        #     optimizer = ACGD2(max_params=self.G, min_params=self.D,
-        #                      lr=self.lr_d, device=self.device, eps=1e-5,
-        #                      solve_x=False, collect_info=collect_info)
-        for e in range(epoch_num):
-            for real_x in self.dataloader:
-                real_x = real_x[0].to(self.device)
-
-                d_real = self.D(real_x)
-
-                z = torch.randn((self.batchsize, self.z_dim), device=self.device)
-                fake_x = self.G(z)
-                d_fake = self.D(fake_x)
-                if loss_type == 'JSD':
-                    loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
-                           self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
-                else:
-                    loss = d_fake.mean() - d_real.mean()
-                if self.gp_weight != 0:
-                    loss = loss + self.gradient_penalty(real_x=real_x, fake_x=fake_x)
-                lossp = loss + self.l2penalty()
-                optimizer.zero_grad()
-                optimizer.step(loss=lossp)
-                iter_num = -1
-                if self.count % self.show_iter == 0:
-                    if collect_info:
-                        self.show_info(timer=time.time() - timer, logdir=logname, D_loss=loss)
-                        timer = time.time()
-                        self.plot_d(d_real, d_fake)
-                    else:
-                        self.print_info(D_loss=loss, timer=time.time() - timer)
-                        timer = time.time()
-
-                if collect_info:
-                    gg, gd, hg, hd, cg_g, cg_d, time_cg, iter_num = optimizer.getinfo()
-                    self.plot_param(D_loss=loss, total_loss=lossp)
-                    self.plot_grad(gd=gd, gg=gg, hd=hd, hg=hg, cg_d=cg_d, cg_g=cg_g)
-                    self.writer.add_scalars('CG it'
-                                            'er num', {'converge iter': iter_num}, self.count)
-                    self.writer.add_scalars('CG running time', {'A ** -1 * b': time_cg}, self.count)
-
                 self.count += 1
-                if self.count % 4000 == 0:
-                    content = {'iter': self.count,
-                               'time': time.time() - start,
-                               'gradient calls': 2 * iter_num + 4}
-                    if is_flag:
-                        inception_score = cal_inception_score(G=self.G, device=self.device, z_dim=self.z_dim)
-                        np.set_printoptions(precision=4)
-                        print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
-                        content.update({'is_mean': inception_score[0],
-                                        'is_std': inception_score[1]})
-                        self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
-                    if fid_flag:
-                        fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
-                        np.set_printoptions(precision=4)
-                        print('FID score: {}'.format(fid_score))
-                        content.update({'FID score': fid_score})
-                        self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
-                    self.iswriter.writerow(content)
-                    self.f.flush()
-                    self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname)
-        self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname)
-        self.f.close()
-
+        self.writer.close()
 
     def train_d(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
         print(mode)
@@ -483,77 +320,34 @@ class VisionData():
                 self.plot_grad(gd=gd, gg=gg)
                 self.plot_d(d_real, d_fake)
                 if self.count % self.show_iter == 0:
-                    self.show_info(timer=time.time() - timer, D_loss=D_loss)
+                    self.show_info(timer=time.time() - timer, D_loss=D_loss, logdir=logname)
                     timer = time.time()
-                self.count += 1
-                if self.count % 4000 == 0:
-                    self.save_checkpoint('fixG_%s-%.5f_%d.pth' % (mode, self.lr, self.count),
+                    self.save_checkpoint('fixG_%s-%.5f_%d.pth' % (mode, self.lr_d, self.count),
                                          dataset=dataname)
+                self.count += 1
             self.writer.close()
-
-    def train_g(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
-        print(mode)
-        if mode == 'SGD':
-            g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            self.writer_init(logname=logname,
-                             comments='SGD-%.3f_%.5f' % (self.lr, self.weight_decay))
-        elif mode == 'Adam':
-            g_optimizer = optim.Adam(self.G.parameters(), lr=self.lr,
-                                     weight_decay=self.weight_decay,
-                                     betas=(0.5, 0.999))
-            self.writer_init(logname=logname,
-                             comments='ADAM-%.3f_%.5f' % (self.lr, self.weight_decay))
-        elif mode == 'RMSProp':
-            g_optimizer = RMSprop(self.G.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            self.writer_init(logname=logname,
-                             comments='RMSProp-%.3f_%.5f' % (self.lr, self.weight_decay))
-        timer = time.time()
-        for e in range(epoch_num):
-            z = torch.randn((self.batchsize, self.z_dim), device=self.device)  ## changed
-            fake_x = self.G(z)
-            d_fake = self.D(fake_x)
-            # G_loss = g_loss(d_fake)
-            G_loss = self.criterion(d_fake, torch.ones(d_fake.shape, device=self.device))
-            g_optimizer.zero_grad()
-            zero_grad(self.D.parameters())
-            G_loss.backward()
-            g_optimizer.step()
-            gd = torch.norm(torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]),
-                            p=2)
-            gg = torch.norm(torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]),
-                            p=2)
-            self.plot_param(G_loss=G_loss)
-            self.plot_grad(gd=gd, gg=gg)
-            if self.count % self.show_iter == 0:
-                self.show_info(timer=time.time() - timer, D_loss=G_loss)
-                timer = time.time()
-            self.count += 1
-            if self.count % 5000 == 0:
-                self.save_checkpoint('fixD_%s-%.5f_%d.pth' % (mode, self.lr, self.count),
-                                     dataset=dataname)
-        self.writer.close()
 
     def traing(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
         print(mode)
         if mode == 'SGD':
-            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
             self.writer_init(logname=logname,
-                             comments='SGD-%.3f_%.5f' % (self.lr, self.weight_decay))
+                             comments='SGD-%.3f_%.5f' % (self.lr_d, self.weight_decay))
         elif mode == 'Adam':
-            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr,
+            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr_d,
                                      weight_decay=self.weight_decay,
                                      betas=(0.5, 0.999))
-            g_optimizer = optim.Adam(self.G.parameters(), lr=self.lr,
+            g_optimizer = optim.Adam(self.G.parameters(), lr=self.lr_d,
                                      weight_decay=self.weight_decay,
                                      betas=(0.5, 0.999))
             self.writer_init(logname=logname,
-                             comments='ADAM-%.3f_%.5f' % (self.lr, self.weight_decay))
+                             comments='ADAM-%.3f_%.5f' % (self.lr_d, self.weight_decay))
         elif mode == 'RMSProp':
-            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            g_optimizer = RMSprop(self.G.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            g_optimizer = RMSprop(self.G.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
             self.writer_init(logname=logname,
-                             comments='RMSProp-%.3f_%.5f' % (self.lr, self.weight_decay))
+                             comments='RMSProp-%.3f_%.5f' % (self.lr_d, self.weight_decay))
 
         timer = time.time()
 
@@ -594,53 +388,9 @@ class VisionData():
                 if self.count % self.show_iter == 0:
                     self.show_info(timer=time.time() - timer, D_loss=D_loss, G_loss=G_loss)
                     timer = time.time()
+                    self.save_checkpoint('sfixD%s-%.5f_%d.pth' % (mode, self.lr_d, self.count),
+                                         dataset=dataname)
                 self.count += 1
-            if e % 5 == 0:
-                self.save_checkpoint('sfixD%s-%.5f_%d.pth' % (mode, self.lr, self.count),
-                                     dataset=dataname)
-        self.writer.close()
-        self.save_checkpoint('sfixD%s-%.5f_%d.pth' % (mode, self.lr, self.count), dataset=dataname)
-
-    def train_ocgd(self, epoch_num, update_D, collect_info=True, dataname='MNIST', logname='MNIST'):
-        timer = time.time() #TODO oneside CGD
-        self.writer_init(logname=logname, comments='%.4fDP%.4fGP%.4f%.5f' % (
-        self.lr_d, self.d_penalty, self.g_penalty, self.weight_decay))
-        if update_D:
-            optimizer = BCGD(max_params=list(self.G.parameters()),
-                             min_params=list(self.D.parameters()), update_min=update_D,
-                             device=self.device, collect_info=True)
-        else:
-            optimizer = BCGD(max_params=list(self.D.parameters()),
-                             min_params=list(self.G.parameters()), update_min=True,
-                             device=self.device, collect_info=True)
-        for e in range(epoch_num):
-            for real_x in self.dataloader:
-                real_x = real_x[0].to(self.device)
-                d_real = self.D(real_x)
-                z = torch.randn((self.batchsize, self.z_dim), device=self.device)
-                fake_x = self.G(z)
-                d_fake = self.D(fake_x)
-                if update_D:
-                    loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
-                           self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
-                else:
-                    loss = self.criterion(d_fake, torch.ones(d_fake.shape, device=self.device))
-                optimizer.zero_grad()
-                optimizer.step(loss=loss)
-                if collect_info:
-                    gg, gd, hg, hd, cg_g, cg_d, time_cg, iter_num = optimizer.getinfo()
-                    self.plot_param(D_loss=loss)
-                    self.plot_grad(gd=gd, gg=gg)
-                    self.writer.add_scalars('CG iter num', {'converge iter': iter_num}, self.count)
-                    self.writer.add_scalars('CG running time', {'A ** -1 * b': time_cg}, self.count)
-                    if self.count % self.show_iter == 0:
-                        self.show_info(D_loss=loss, timer=time.time() - timer)
-                        timer = time.time()
-                        self.plot_d(d_real, d_fake)
-                self.count += 1
-                if self.count % 2000 == 0:
-                    self.save_checkpoint('%.5f_%d.pth' % (self.lr, self.count), dataset=dataname)
-        self.save_checkpoint('%.5f_%d.pth' % (self.lr, self.count), dataset=dataname)
         self.writer.close()
 
 
@@ -649,24 +399,24 @@ def train_mnist():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
     print('MNIST')
-    learning_rate = 0.0001
+    lr = 0.001
     z_dim = 96
     D = dc_D()
     G = dc_G(z_dim=z_dim)
-    dataset = MNIST('datas/mnist', train=True, transform=transform)
+    dataset = MNIST('./datas/mnist', download=True, train=True, transform=transform)
     trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=128,
-                         lr=learning_rate, show_iter=200,
+                         lr_d=lr, lr_g=lr, show_iter=600,
                          weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim),
                          gp_weight=0)
-    # trainer.load_checkpoint('checkpoints/MNIST-0.0001/DIM64Adam-0.00010_9849.pth', count=9849, load_d=True, load_g=True)
-    # trainer.load_checkpoint('checkpoints/MNIST-0.0001/DIM64Adam-0.00010_5159.pth', count=5159, load_d=True, load_g=True)
-    # trainer.load_checkpoint('checkpoints/MNIST-0.0001/DIM64Adam-0.00010_469.pth', count=469, load_d=True, load_g=True)
-    # trainer.train_d(epoch_num=100, mode=modes[3], logname='MNIST2', dataname='MNIST')
+    # trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='chk')
+    trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_600.pth', count=0, load_d=True, load_g=True)
+
+    trainer.train_d(epoch_num=100, mode=modes[3], logname='overtrain', dataname='MNIST')
     # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/backup/epoch21-D1.pth', count=32000, load_d=True, load_g=True)
     # trainer.load_checkpoint('checkpoints/MNIST-0.0001/backup/fixG_D1_Adam-0.00010_55000.pth', count=55000, load_d=True, load_g=True)
-    trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/0.00010_50000.pth', count=50000,
-                            load_d=True, load_g=True)
-    trainer.traing(epoch_num=5, mode=modes[3], logname='MNIST3', dataname='MNIST')
+    # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/0.00010_50000.pth', count=50000,
+    #                         load_d=True, load_g=True)
+    # trainer.traing(epoch_num=5, mode=modes[3], logname='MNIST3', dataname='MNIST')
     # trainer.train_ocgd(epoch_num=50, update_D=True, collect_info=True, logname='MNIST3', dataname='MNIST')
     # trainer.train_gd(epoch_num=60, mode=modes[3], logname='MNIST2', dataname='MNIST')
     # trainer.train_cgd(epoch_num=100, mode=modes[1], cg_time=True)
@@ -674,72 +424,8 @@ def train_mnist():
     # trainer.train_bcgd(epoch_num=100, mode='BCGD', collect_info=True, dataname='MNIST', logname='MNIST2')
 
 
-def train_cifar():
-    modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    print(device)
-    print('CIFAR10')
-    learning_rate = 0.15
-    batch_size = 128
-    z_dim = 96
-    D = dc_d()
-    G = dc_g(z_dim=z_dim)
-    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform, download=True)
-    trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim,
-                         batchsize=batch_size, lr=learning_rate,
-                         show_iter=500, weight_decay=0.0, d_penalty=0.001, g_penalty=0,
-                         noise_shape=(64, z_dim))
-    trainer.train_bcgd(epoch_num=100, mode='ACGD', collect_info=True, dataname='CIFAR10',
-                       logname='CIFAR10')
-    # trainer.train_gd(epoch_num=100, mode=modes[2], dataname='CIFAR10', logname='CIFAR10')
-
-
-def train_wgan(config):
-    modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    print(device)
-    print('CIFAR10')
-    if config['dropout']:
-        print('dropout!')
-        D = GoodDiscriminatord()
-    else:
-        D = GoodDiscriminator()
-    G = GoodGenerator()
-    dataset = CIFAR10(root='datas/cifar10', download=True, train=True, transform=transform)
-    trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=config['z_dim'],
-                         batchsize=config['batchsize'],
-                         lr_d=config['lr_d'], lr_g=config['lr_g'],
-                         show_iter=config['show_iter'], weight_decay=0.0,
-                         d_penalty=config['d_penalty'], g_penalty=0,
-                         noise_shape=(64, config['z_dim']), gp_weight=config['gp_weight'])
-    # d_penalty: L2 penalty on discriminator;
-    # gp_weight: gradient penalty weight
-    # trainer.load_checkpoint(chkpt_path='')
-    if config['optimizer'] == 'ACGD' or config['optimizer'] == 'BCGD' or config['optimizer'] == 'ACGD2':
-        trainer.train_bcgd(is_flag=config['eval_is'], fid_flag=config['eval_fid'],
-                           epoch_num=config['epoch_num'], mode=config['optimizer'],
-                           collect_info=config['collect_info'],
-                           dataname=config['dataset'],
-                           logname=config['logdir'],
-                           loss_type=config['loss_type'])
-    else:
-        trainer.train_gd(is_flag=config['eval_is'], fid_flag=config['eval_fid'],
-                         epoch_num=config['epoch_num'], mode=config['optimizer'],
-                         dataname=config['dataset'], logname=config['logdir'],
-                         loss_type=config['loss_type'])
-    # Loss type: JSD, WGAN
-    # trainer.train_bcgd(epoch_num=120, mode='ACGD', collect_info=True, dataname='CIFAR10-WGAN', logname='CIFAR10-WGAN', loss_type='WGAN')
-
-    # trainer.train_gd(epoch_num=600, mode=modes[3], dataname='CIFAR10-JSD', logname='CIFAR10-JSD', loss_type='JSD')
-    # uncomment to train GAN with Adam
-    # 595605 to reproduce
-
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
-    parser = prepare_parser()
-    config = vars(parser.parse_args())
-    print(config)
-    train_wgan(config)
-    # train_mnist()
-    # train_cifar()
+    train_mnist()
+
 
