@@ -42,7 +42,6 @@ class BCGD(object):
 
     def step(self, loss):
         lr = self.state['lr']
-        solve_x = self.state['solve_x']
         time_step = self.state['step'] + 1
         self.state['step'] = time_step
 
@@ -64,7 +63,7 @@ class BCGD(object):
             self.norm_py = torch.norm(hvp_y_vec, p=2)
             self.timer = time.time()
 
-        if solve_x:
+        if self.state['solve_x']:
             cg_y, self.iter_num = conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
                                                      x_params=self.min_params,
                                                      y_params=self.max_params, b=p_y, x=self.state['old_min'],
@@ -110,5 +109,5 @@ class BCGD(object):
             self.norm_gy = torch.norm(grad_y_vec, p=2)
             self.norm_cgx = torch.norm(cg_x, p=2)
             self.norm_cgy = torch.norm(cg_y, p=2)
-        self.state['solve_x'] = False if solve_x else True
+        self.state['solve_x'] = False if self.state['solve_x'] else True
 

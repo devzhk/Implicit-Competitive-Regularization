@@ -1,4 +1,5 @@
 import os
+import csv
 import time
 import torch
 import torch.nn as nn
@@ -13,7 +14,7 @@ from torchvision.datasets import MNIST
 
 from GANs.models import dc_D, dc_G
 
-from CGDs.cgd_utils import zero_grad
+from CGDs.cgd_utils import zero_grad, Hvp_vec, conjugate_gradient
 
 seed = torch.randint(0, 1000000, (1,))
 # bad seeds: 850527
@@ -70,19 +71,21 @@ class VisionData():
               % (self.lr_d, self.lr_g, self.weight_decay, self.d_penalty, self.g_penalty, self.gp_weight))
         self.dataset = dataset
         self.dataloader = DataLoader(dataset=self.dataset, batch_size=self.batchsize, shuffle=True,
-                                     num_workers=2, drop_last=True)
+                                     num_workers=2)
 
         self.D = D.to(self.device)
         self.G = G.to(self.device)
         if gpu_num > 1:
             self.D = nn.DataParallel(self.D, list(range(gpu_num)))
             self.G = nn.DataParallel(self.G, list(range(gpu_num)))
-
-        self.D.apply(weights_init_d)
-        self.G.apply(weights_init_g)
+        self.ini_weight()
 
         self.criterion = nn.BCEWithLogitsLoss()
         self.fixed_noise = torch.randn(noise_shape, device=device)
+
+    def ini_weight(self):
+        self.D.apply(weights_init_d)
+        self.G.apply(weights_init_g)
 
     def generate_data(self):
         z = torch.randn((self.batchsize, self.z_dim), device=self.device)
@@ -147,7 +150,7 @@ class VisionData():
         from datetime import datetime
         current_time = datetime.now().strftime('%b%d_%H-%M-%S')
         path = ('logs/%s/' % logname) + current_time + '_' + comments
-        self.writer = SummaryWriter(logdir=path)
+        self.writer = SummaryWriter(log_dir=path)
 
     def show_info(self, timer, logdir, D_loss=None, G_loss=None):
         if G_loss is not None:
@@ -162,13 +165,12 @@ class VisionData():
         try:
             self.writer.add_images('Generated images', fake_data, global_step=self.count,
                                    dataformats='NCHW')
+        except Exception as e:
             path = 'figs/%s/' % logdir
             if not os.path.exists(path):
                 os.makedirs(path)
             vutils.save_image(fake_data, path + 'iter_%d.png' % self.count)
-        except Exception as e:
-            print(type(e))
-            print('Fail to plot')
+            print('Fail to plot: save images to %s' % path)
 
     def print_info(self, timer, D_loss=None, G_loss=None):
         if G_loss is not None:
@@ -206,7 +208,42 @@ class VisionData():
         wd = torch.norm(torch.cat([p.contiguous().view(-1) for p in self.D.parameters()]), p=2)
         wg = torch.norm(torch.cat([p.contiguous().view(-1) for p in self.G.parameters()]), p=2)
 
-        self.writer.add_scalars('weight', {'D params': wd, 'G params': wg.item()}, self.count)
+        self.writer.add_scalars('weight', {'D params': wd.item(), 'G params': wg.item()}, self.count)
+
+    def plot_proj(self, epoch, loss, model_vec):
+        current_model = torch.cat([p.contiguous().view(-1) for p in self.D.parameters()]).detach()
+        weight_vec = model_vec - current_model
+        model_vec /= torch.norm(weight_vec, p=2)
+
+        d_param = list(self.D.parameters())
+        g_param = list(self.G.parameters())
+        eta = 1e-2
+        import torch.autograd as autograd
+        grad_d = autograd.grad(loss, d_param, create_graph=True, retain_graph=True)
+        grad_d_vec = torch.cat([g.contiguous().view(-1) for g in grad_d])
+        grad_g = autograd.grad(loss, g_param, create_graph=True, retain_graph=True)
+        grad_g_vec = torch.cat([g.contiguous().view(-1) for g in grad_g])
+        grad_d_vec_detach = grad_d_vec.clone().detach()
+        grad_g_vec_detach = grad_g_vec.clone().detach()
+        hvp_d_vec = Hvp_vec(grad_g_vec, d_param, grad_g_vec_detach, retain_graph=True)
+        p_d = torch.add(grad_d_vec, eta * hvp_d_vec).detach_()
+        cg_d, iter_num = conjugate_gradient(grad_x=grad_d_vec, grad_y=grad_g_vec,
+                                            x_params=d_param, y_params=g_param, b=p_d,
+                                            nsteps=p_d.shape[0], lr_x=eta, lr_y=eta, device=self.device)
+        print('CG iter num: %d' % iter_num)
+        proj_grad = torch.dot(model_vec, - grad_d_vec_detach)
+        proj_hvp = torch.dot(model_vec, - p_d)
+        proj_cg = torch.dot(model_vec, - cg_d)
+        self.writer.add_scalars('Projection', {'grad': proj_grad,
+                                               'hvp': proj_hvp,
+                                               'cgd': proj_cg}, global_step=epoch)
+        cos_grad = proj_grad / torch.norm(grad_d_vec_detach, p=2)
+        cos_hvp = proj_hvp / torch.norm(p_d, p=2)
+        cos_cgd = proj_cg / torch.norm(cg_d, p=2)
+        self.writer.add_scalars('Cosine', {'grad': cos_grad,
+                                           'hvp': cos_hvp,
+                                           'cgd': cos_cgd}, global_step=epoch)
+
 
     def train_gd(self, epoch_num, mode='Adam',
                  dataname='MNIST', logname='MNIST',
@@ -277,7 +314,17 @@ class VisionData():
                 self.count += 1
         self.writer.close()
 
-    def train_d(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
+    def train_d(self, epoch_num, mode='Adam',
+                dataname='MNIST', logname='MNIST',
+                overtrain_path=None):
+
+        if overtrain_path is not None:
+            discriminator = dc_D().to(self.device)
+            model_weight = torch.load(overtrain_path)
+            discriminator.load_state_dict(model_weight['D'])
+            model_vec = torch.cat([p.contiguous().view(-1) for p in discriminator.parameters()])
+            print('Load overtrained discriminator')
+
         print(mode)
         if mode == 'SGD':
             d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
@@ -294,12 +341,17 @@ class VisionData():
             self.writer_init(logname=logname,
                              comments='RMSProp-%.3f_%.5f' % (self.lr_d, self.weight_decay))
         timer = time.time()
+        d_losses = []
+        g_losses = []
         for e in range(epoch_num):
+            tol_correct = 0
+            tol_loss = 0
+            tol_gloss = 0
             for real_x in self.dataloader:
                 real_x = real_x[0].to(self.device)
                 d_real = self.D(real_x)
 
-                z = torch.randn((self.batchsize, self.z_dim),
+                z = torch.randn((real_x.shape[0], self.z_dim),
                                 device=self.device)  ## changed (shape)
                 fake_x = self.G(z)
                 d_fake = self.D(fake_x)
@@ -307,25 +359,50 @@ class VisionData():
                 # D_loss = gan_loss(d_real, d_fake)
                 D_loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
                          self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
+                tol_loss += D_loss.item() * real_x.shape[0]
+                G_loss = self.criterion(d_fake, torch.ones(d_fake.shape, device=self.device)).detach_()
+                tol_gloss += G_loss.item() * fake_x.shape[0]
+                if self.d_penalty != 0:
+                    D_loss += self.l2penalty()
+                if self.count % 2 == 0 and overtrain_path is not None:
+                    self.plot_proj(epoch=self.count, model_vec=model_vec, loss=D_loss)
                 d_optimizer.zero_grad()
                 zero_grad(self.G.parameters())
                 D_loss.backward()
                 d_optimizer.step()
 
+                tol_correct += (d_real > 0).sum().item() + (d_fake < 0).sum().item()
+
                 gd = torch.norm(
                     torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
                 gg = torch.norm(
                     torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]), p=2)
-                self.plot_param(D_loss=D_loss)
+                self.plot_param(D_loss=D_loss, G_loss=G_loss)
                 self.plot_grad(gd=gd, gg=gg)
                 self.plot_d(d_real, d_fake)
                 if self.count % self.show_iter == 0:
-                    self.show_info(timer=time.time() - timer, D_loss=D_loss, logdir=logname)
+                    self.show_info(timer=time.time() - timer,
+                                   D_loss=D_loss, G_loss=G_loss,
+                                   logdir=logname)
                     timer = time.time()
-                    self.save_checkpoint('fixG_%s-%.5f_%d.pth' % (mode, self.lr_d, self.count),
-                                         dataset=dataname)
                 self.count += 1
-            self.writer.close()
+            tol_loss /= len(self.dataset)
+            tol_gloss /= len(self.dataset)
+            d_losses.append(tol_loss)
+            g_losses.append(tol_gloss)
+            acc = 50.0 * tol_correct / len(self.dataset)
+
+            self.writer.add_scalar('Train/D_Loss', tol_loss, global_step=e)
+            self.writer.add_scalar('Train/G_Loss', tol_gloss, global_step=e)
+            self.writer.add_scalar('Train/Accuracy', acc, global_step=e)
+            print('Epoch :{}/{}, Acc: {}/{}: {:.3f}%, '
+                  'D Loss mean: {:.4f}, G Loss mean: {:.4f}'
+                  .format(e, epoch_num, tol_correct, 2 * len(self.dataset), acc,
+                          tol_loss, tol_gloss))
+            self.save_checkpoint('fixG_%s-%.5f_%d.pth' % (mode, self.lr_d, e),
+                                 dataset=dataname)
+        self.writer.close()
+        return d_losses, g_losses
 
     def traing(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
         print(mode)
@@ -405,27 +482,53 @@ def train_mnist():
     G = dc_G(z_dim=z_dim)
     dataset = MNIST('./datas/mnist', download=True, train=True, transform=transform)
     trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=128,
-                         lr_d=lr, lr_g=lr, show_iter=600,
+                         lr_d=lr, lr_g=lr, show_iter=500,
                          weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim),
                          gp_weight=0)
-    # trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='chk')
-    trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_600.pth', count=0, load_d=True, load_g=True)
-
-    trainer.train_d(epoch_num=100, mode=modes[3], logname='overtrain', dataname='MNIST')
+    # trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='cosine')
+    trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth', count=0, load_d=False, load_g=True)
+    trainer.train_d(epoch_num=60, mode=modes[3], logname='cosine', dataname='MNIST')
+    # trainer.train_d(epoch_num=3, mode=modes[3], logname='cosine', dataname='MNIST',
+    #                 overtrain_path='checkpoints/0.00000MNIST-0.0010/fixG_Adam-0.00100_49.pth')
     # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/backup/epoch21-D1.pth', count=32000, load_d=True, load_g=True)
-    # trainer.load_checkpoint('checkpoints/MNIST-0.0001/backup/fixG_D1_Adam-0.00010_55000.pth', count=55000, load_d=True, load_g=True)
-    # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/0.00010_50000.pth', count=50000,
-    #                         load_d=True, load_g=True)
-    # trainer.traing(epoch_num=5, mode=modes[3], logname='MNIST3', dataname='MNIST')
-    # trainer.train_ocgd(epoch_num=50, update_D=True, collect_info=True, logname='MNIST3', dataname='MNIST')
-    # trainer.train_gd(epoch_num=60, mode=modes[3], logname='MNIST2', dataname='MNIST')
-    # trainer.train_cgd(epoch_num=100, mode=modes[1], cg_time=True)
-    # trainer.save_checkpoint('wdg-cgd.pth')
-    # trainer.train_bcgd(epoch_num=100, mode='BCGD', collect_info=True, dataname='MNIST', logname='MNIST2')
+
+
+def trains():
+    import pandas as pd
+    modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    print(device)
+    print('MNIST')
+    lr = 0.001
+    z_dim = 96
+    D = dc_D()
+    G = dc_G(z_dim=z_dim)
+    dataset = MNIST('./datas/mnist', download=True, train=True, transform=transform)
+    trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=128,
+                         lr_d=lr, lr_g=lr, show_iter=500,
+                         weight_decay=0.0, d_penalty=0.001, g_penalty=0, noise_shape=(64, z_dim),
+                         gp_weight=0)
+    d_loss_list = []
+    g_loss_list = []
+    row_names = ['%d.pth' % i for i in range(500, 9500, 500)]
+    for name in row_names:
+        trainer.ini_weight()
+        weight_path = 'checkpoints/0.00000MNIST-0.0001/Adam-0.00010_%s' % name
+        trainer.load_checkpoint(weight_path, count=0, load_g=True, load_d=False)
+        d_losses, g_losses = trainer.train_d(epoch_num=10, mode=modes[3], logname='fG', dataname='MNIST')
+        d_loss_list.append(d_losses)
+        g_loss_list.append(g_losses)
+    df = pd.DataFrame(d_loss_list, index=row_names)
+    gf = pd.DataFrame(g_loss_list, index=row_names)
+    print(df, gf)
+    df.to_csv(r'results/d_loss.csv')
+    gf.to_csv(r'results/g_loss.csv')
+
 
 
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
-    train_mnist()
+    # train_mnist()
+    trains()
 
 

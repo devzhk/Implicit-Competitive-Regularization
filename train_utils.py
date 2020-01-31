@@ -41,9 +41,6 @@ def save_checkpoint(path, name, optimizer, D, G):
     print('model is saved at %s' % chk_name + name)
 
 
-def load_checkpoint(path, D, G, load_d, load_g, optim_d, optim_g)
-
-
 def detransform(x):
     return (x + 1.0) / 2.0
 
