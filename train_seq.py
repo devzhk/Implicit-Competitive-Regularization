@@ -10,7 +10,6 @@ import torchvision.utils as vutils
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
-from CGDs.optimizers import BCGD
 from utils import train_seq_parser
 from train_utils import data_model, save_checkpoint, detransform, \
     weights_init_d, weights_init_g

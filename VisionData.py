@@ -13,7 +13,7 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from GANs.models import dc_D, dc_G
-
+from CGDs.adam import Adam
 from CGDs.cgd_utils import zero_grad, Hvp_vec, conjugate_gradient
 
 seed = torch.randint(0, 1000000, (1,))
@@ -187,6 +187,20 @@ class VisionData():
                                 {'real': d_real.mean().item(), 'fake': d_fake.mean().item()},
                                 self.count)
 
+    def plot_optim(self, d_steps, d_updates, g_steps, g_updates):
+        self.writer.add_histogram('Stepsize/Discriminator', d_steps, global_step=self.count)
+        self.writer.add_histogram('Stepsize/Generator', g_steps, global_step=self.count)
+        self.writer.add_histogram('Update/Discriminator', d_updates, global_step=self.count)
+        self.writer.add_histogram('Update/Generator', g_updates, global_step=self.count)
+        ds_norm = torch.norm(d_steps, p=2)
+        du_norm = torch.norm(d_updates, p=2)
+        gs_norm = torch.norm(g_steps, p=2)
+        gu_norm = torch.norm(g_updates, p=2)
+        self.writer.add_scalars('Stepsize length', {'Discriminator': ds_norm,
+                                             'Generator': gs_norm}, global_step=self.count)
+        self.writer.add_scalars('Update length', {'Discriminator': du_norm,
+                                                  'Generator': gu_norm}, global_step=self.count)
+
     def plot_grad(self, gd, gg, hd=None, hg=None, cg_d=None, cg_g=None):
         self.writer.add_scalars('Delta', {'D gradient': gd.item(), 'G gradient': gg.item()},
                                 self.count)
@@ -205,9 +219,12 @@ class VisionData():
         if total_loss is not None:
             self.writer.add_scalars('Loss', {'loss+l2penalty': total_loss.item()}, self.count)
 
-        wd = torch.norm(torch.cat([p.contiguous().view(-1) for p in self.D.parameters()]), p=2)
-        wg = torch.norm(torch.cat([p.contiguous().view(-1) for p in self.G.parameters()]), p=2)
-
+        d_param = torch.cat([p.contiguous().view(-1) for p in self.D.parameters()])
+        g_param = torch.cat([p.contiguous().view(-1) for p in self.G.parameters()])
+        wd = torch.norm(d_param, p=2)
+        wg = torch.norm(g_param, p=2)
+        self.writer.add_histogram('Parameters/Discriminator', d_param, global_step=self.count)
+        self.writer.add_histogram('Parameters/Generator', g_param, global_step=self.count)
         self.writer.add_scalars('weight', {'D params': wd.item(), 'G params': wg.item()}, self.count)
 
     def plot_proj(self, epoch, loss, model_vec):
@@ -244,7 +261,6 @@ class VisionData():
                                            'hvp': cos_hvp,
                                            'cgd': cos_cgd}, global_step=epoch)
 
-
     def train_gd(self, epoch_num, mode='Adam',
                  dataname='MNIST', logname='MNIST',
                  loss_type='JSD'):
@@ -253,10 +269,10 @@ class VisionData():
             d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
             g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
         elif mode == 'Adam':
-            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr_d,
-                                     weight_decay=self.weight_decay, betas=(0.5, 0.999))
-            g_optimizer = optim.Adam(self.G.parameters(), lr=self.lr_g,
-                                     weight_decay=self.weight_decay, betas=(0.5, 0.999))
+            d_optimizer = Adam(self.D.parameters(), lr=self.lr_d,
+                               weight_decay=self.weight_decay, betas=(0.5, 0.999))
+            g_optimizer = Adam(self.G.parameters(), lr=self.lr_g,
+                               weight_decay=self.weight_decay, betas=(0.5, 0.999))
         elif mode == 'RMSProp':
             d_optimizer = RMSprop(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
             g_optimizer = RMSprop(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
@@ -284,8 +300,7 @@ class VisionData():
                 D_loss = loss + self.l2penalty()
                 d_optimizer.zero_grad()
                 D_loss.backward()
-                d_optimizer.step()
-
+                d_steps, d_updates = d_optimizer.step()
                 z = torch.randn((self.batchsize, self.z_dim), device=self.device)  ## changed
                 fake_x = self.G(z)
                 d_fake = self.D(fake_x)
@@ -296,7 +311,7 @@ class VisionData():
                     G_loss = - d_fake.mean()
                 g_optimizer.zero_grad()
                 G_loss.backward()
-                g_optimizer.step()
+                g_steps, g_updates = g_optimizer.step()
                 gd = torch.norm(
                     torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
                 gg = torch.norm(
