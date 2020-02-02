@@ -13,8 +13,8 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from GANs.models import dc_D, dc_G
-from CGDs.adam import Adam
-from CGDs.cgd_utils import zero_grad, Hvp_vec, conjugate_gradient
+from optims.adam import Adam
+from optims.cgd_utils import zero_grad, Hvp_vec, conjugate_gradient
 
 seed = torch.randint(0, 1000000, (1,))
 # bad seeds: 850527
@@ -316,7 +316,8 @@ class VisionData():
                     torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
                 gg = torch.norm(
                     torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]), p=2)
-
+                self.plot_optim(d_steps=d_steps, d_updates=d_updates,
+                                g_steps=g_steps, g_updates=g_updates)
                 self.plot_param(D_loss=D_loss, G_loss=G_loss)
                 self.plot_grad(gd=gd, gg=gg)
                 self.plot_d(d_real, d_fake)
@@ -491,7 +492,7 @@ def train_mnist():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
     print('MNIST')
-    lr = 0.001
+    lr = 0.0001
     z_dim = 96
     D = dc_D()
     G = dc_G(z_dim=z_dim)
@@ -500,9 +501,9 @@ def train_mnist():
                          lr_d=lr, lr_g=lr, show_iter=500,
                          weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim),
                          gp_weight=0)
-    # trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='cosine')
-    trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth', count=0, load_d=False, load_g=True)
-    trainer.train_d(epoch_num=60, mode=modes[3], logname='cosine', dataname='MNIST')
+    trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='newchk')
+    # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth', count=0, load_d=False, load_g=True)
+    # trainer.train_d(epoch_num=60, mode=modes[3], logname='cosine', dataname='MNIST')
     # trainer.train_d(epoch_num=3, mode=modes[3], logname='cosine', dataname='MNIST',
     #                 overtrain_path='checkpoints/0.00000MNIST-0.0010/fixG_Adam-0.00100_49.pth')
     # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/backup/epoch21-D1.pth', count=32000, load_d=True, load_g=True)
@@ -543,7 +544,7 @@ def trains():
 
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
-    # train_mnist()
-    trains()
+    train_mnist()
+    # trains()
 
 
