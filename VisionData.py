@@ -13,7 +13,7 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from GANs.models import dc_D, dc_G
-from optims.adam import Adam
+from optims.adam import Adam, RAdam
 from optims.cgd_utils import zero_grad, Hvp_vec, conjugate_gradient
 
 seed = torch.randint(0, 1000000, (1,))
@@ -71,7 +71,7 @@ class VisionData():
               % (self.lr_d, self.lr_g, self.weight_decay, self.d_penalty, self.g_penalty, self.gp_weight))
         self.dataset = dataset
         self.dataloader = DataLoader(dataset=self.dataset, batch_size=self.batchsize, shuffle=True,
-                                     num_workers=2)
+                                     num_workers=4)
 
         self.D = D.to(self.device)
         self.G = G.to(self.device)
@@ -135,7 +135,7 @@ class VisionData():
             }, chk_name + path)
         elif d_optim is not None:
             torch.save({
-                'D':d_state_dict,
+                'D': d_state_dict,
                 'G': g_state_dict,
                 'ACGD': d_optim
             }, chk_name + path)
@@ -155,7 +155,7 @@ class VisionData():
     def show_info(self, timer, logdir, D_loss=None, G_loss=None):
         if G_loss is not None:
             print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
-            self.count, D_loss.item(), G_loss.item(), timer))
+                self.count, D_loss.item(), G_loss.item(), timer))
         else:
             print('Iter : %d, Loss: %.5f, time: %.3fs' % (self.count, D_loss.item(), timer))
         self.writer.add_scalars('time cost(s)', {'%s iter' % self.show_iter: timer}, self.count)
@@ -175,7 +175,7 @@ class VisionData():
     def print_info(self, timer, D_loss=None, G_loss=None):
         if G_loss is not None:
             print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
-            self.count, D_loss.item(), G_loss.item(), timer))
+                self.count, D_loss.item(), G_loss.item(), timer))
         else:
             print('Iter : %d, Loss: %.5f, time: %.3fs' % (self.count, D_loss.item(), timer))
         fake_data = self.G(self.fixed_noise).detach()
@@ -187,19 +187,27 @@ class VisionData():
                                 {'real': d_real.mean().item(), 'fake': d_fake.mean().item()},
                                 self.count)
 
-    def plot_optim(self, d_steps, d_updates, g_steps, g_updates):
-        self.writer.add_histogram('Stepsize/Discriminator', d_steps, global_step=self.count)
-        self.writer.add_histogram('Stepsize/Generator', g_steps, global_step=self.count)
-        self.writer.add_histogram('Update/Discriminator', d_updates, global_step=self.count)
-        self.writer.add_histogram('Update/Generator', g_updates, global_step=self.count)
-        ds_norm = torch.norm(d_steps, p=2)
-        du_norm = torch.norm(d_updates, p=2)
-        gs_norm = torch.norm(g_steps, p=2)
-        gu_norm = torch.norm(g_updates, p=2)
-        self.writer.add_scalars('Stepsize length', {'Discriminator': ds_norm,
-                                             'Generator': gs_norm}, global_step=self.count)
-        self.writer.add_scalars('Update length', {'Discriminator': du_norm,
-                                                  'Generator': gu_norm}, global_step=self.count)
+    def plot_optim(self, d_steps=None, d_updates=None,
+                   g_steps=None, g_updates=None,
+                   his=False):
+
+        if d_steps is not None and d_updates is not None:
+            ds_norm = torch.norm(d_steps, p=2)
+            du_norm = torch.norm(d_updates, p=2)
+            self.writer.add_scalars('Stepsize length', {'Discriminator': ds_norm}, global_step=self.count)
+            self.writer.add_scalars('Update length', {'Discriminator': du_norm}, global_step=self.count)
+            if his:
+                self.writer.add_histogram('Stepsize/Discriminator', d_steps, global_step=self.count)
+                self.writer.add_histogram('Update/Discriminator', d_updates, global_step=self.count)
+
+        if g_steps is not None and g_updates is not None:
+            gs_norm = torch.norm(g_steps, p=2)
+            gu_norm = torch.norm(g_updates, p=2)
+            self.writer.add_scalars('Stepsize length', {'Generator': gs_norm}, global_step=self.count)
+            self.writer.add_scalars('Update length', {'Generator': gu_norm}, global_step=self.count)
+            if his:
+                self.writer.add_histogram('Stepsize/Generator', g_steps, global_step=self.count)
+                self.writer.add_histogram('Update/Generator', g_updates, global_step=self.count)
 
     def plot_grad(self, gd, gg, hd=None, hg=None, cg_d=None, cg_g=None):
         self.writer.add_scalars('Delta', {'D gradient': gd.item(), 'G gradient': gg.item()},
@@ -261,14 +269,25 @@ class VisionData():
                                            'hvp': cos_hvp,
                                            'cgd': cos_cgd}, global_step=epoch)
 
+    def plot_diff(self, model_vec):
+        current_model = torch.cat([p.contiguous().view(-1) for p in self.D.parameters()]).detach()
+        weight_vec = current_model - model_vec
+        vom = torch.norm(weight_vec, p=2)
+        self.writer.add_scalar('Distance from checkpoint', vom, self.count)
+
     def train_gd(self, epoch_num, mode='Adam',
                  dataname='MNIST', logname='MNIST',
-                 loss_type='JSD'):
+                 loss_type='JSD', his_flag=False,
+                 info_time=100, compare_weight=None,
+                 optim_state=None):
+        if compare_weight is not None:
+            discriminator = dc_D().to(self.device)
+            model_weight = torch.load(compare_weight)
+            discriminator.load_state_dict(model_weight['D'])
+            model_vec = torch.cat([p.contiguous().view(-1) for p in discriminator.parameters()])
+            print('Load discriminator from %s' % compare_weight)
         print(mode)
-        if mode == 'SGD':
-            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
-            g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
-        elif mode == 'Adam':
+        if mode == 'Adam':
             d_optimizer = Adam(self.D.parameters(), lr=self.lr_d,
                                weight_decay=self.weight_decay, betas=(0.5, 0.999))
             g_optimizer = Adam(self.G.parameters(), lr=self.lr_g,
@@ -278,6 +297,84 @@ class VisionData():
             g_optimizer = RMSprop(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
         self.writer_init(logname=logname,
                          comments='%s-%.3f_%.5f' % (mode, self.lr_d, self.weight_decay))
+        if optim_state is not None:
+            chk = torch.load(optim_state)
+            d_optimizer.load_state_dict(chk['D_optim'])
+            g_optimizer.load_state_dict(chk['G_optim'])
+            print('load optimizer state')
+        timer = time.time()
+        flag = False
+
+        for e in range(epoch_num):
+            for real_x in self.dataloader:
+                real_x = real_x[0].to(self.device)
+                d_real = self.D(real_x)
+
+                z = torch.randn((self.batchsize, self.z_dim),
+                                device=self.device)  ## changed (shape)
+                fake_x = self.G(z)
+                d_fake = self.D(fake_x.detach())
+                if loss_type == 'JSD':
+                    loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
+                           self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
+                else:
+                    loss = d_fake.mean() - d_real.mean()
+                D_loss = loss + self.l2penalty()
+                if compare_weight is not None and self.count % info_time == 0:
+                    self.plot_diff(model_vec=model_vec)
+                d_optimizer.zero_grad()
+                D_loss.backward()
+                if self.count % info_time == 0:
+                    flag = True
+                else:
+                    flag = False
+                d_steps, d_updates = d_optimizer.step(info=flag)
+
+                z = torch.randn((self.batchsize, self.z_dim), device=self.device)  ## changed
+                fake_x = self.G(z)
+                d_fake = self.D(fake_x)
+                # G_loss = g_loss(d_fake)
+                if loss_type == 'JSD':
+                    G_loss = self.criterion(d_fake, torch.ones(d_fake.shape, device=self.device))
+                else:
+                    G_loss = - d_fake.mean()
+                g_optimizer.zero_grad()
+                G_loss.backward()
+                g_steps, g_updates = g_optimizer.step(info=flag)
+                gd = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
+                gg = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]), p=2)
+                if flag:
+                    self.plot_optim(d_steps=d_steps, d_updates=d_updates,
+                                    g_steps=g_steps, g_updates=g_updates,
+                                    his=his_flag)
+                self.plot_param(D_loss=D_loss, G_loss=G_loss)
+                self.plot_grad(gd=gd, gg=gg)
+                self.plot_d(d_real, d_fake)
+
+                if self.count % self.show_iter == 0:
+                    self.show_info(timer=time.time() - timer, D_loss=D_loss, G_loss=G_loss, logdir=logname)
+                    timer = time.time()
+                    self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname,
+                                         d_optim=d_optimizer.state_dict(), g_optim=g_optimizer.state_dict())
+                self.count += 1
+        self.writer.close()
+
+    def train_sgd(self, epoch_num, mode='Adam',
+                 dataname='MNIST', logname='MNIST',
+                 loss_type='JSD', compare_weight=None, info_time=100):
+        if compare_weight is not None:
+            discriminator = dc_D().to(self.device)
+            model_weight = torch.load(compare_weight)
+            discriminator.load_state_dict(model_weight['D'])
+            model_vec = torch.cat([p.contiguous().view(-1) for p in discriminator.parameters()])
+            print('Load discriminator from %s' % compare_weight)
+
+        d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+        g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
+        self.writer_init(logname=logname,
+                         comments='%s-%.3f_%.3f' % (mode, self.lr_d, self.lr_g))
         timer = time.time()
         for e in range(epoch_num):
             for real_x in self.dataloader:
@@ -293,14 +390,13 @@ class VisionData():
                            self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
                 else:
                     loss = d_fake.mean() - d_real.mean()
-
-                # D_loss = gan_loss(d_real, d_fake)
-                # D_loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
-                #          self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
                 D_loss = loss + self.l2penalty()
+                if compare_weight is not None and self.count % info_time == 0:
+                    self.plot_diff(model_vec=model_vec)
                 d_optimizer.zero_grad()
                 D_loss.backward()
-                d_steps, d_updates = d_optimizer.step()
+                d_optimizer.step()
+
                 z = torch.randn((self.batchsize, self.z_dim), device=self.device)  ## changed
                 fake_x = self.G(z)
                 d_fake = self.D(fake_x)
@@ -311,51 +407,43 @@ class VisionData():
                     G_loss = - d_fake.mean()
                 g_optimizer.zero_grad()
                 G_loss.backward()
-                g_steps, g_updates = g_optimizer.step()
+                g_optimizer.step()
+
                 gd = torch.norm(
                     torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
                 gg = torch.norm(
                     torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]), p=2)
-                self.plot_optim(d_steps=d_steps, d_updates=d_updates,
-                                g_steps=g_steps, g_updates=g_updates)
                 self.plot_param(D_loss=D_loss, G_loss=G_loss)
                 self.plot_grad(gd=gd, gg=gg)
                 self.plot_d(d_real, d_fake)
-
                 if self.count % self.show_iter == 0:
                     self.show_info(timer=time.time() - timer, D_loss=D_loss, G_loss=G_loss, logdir=logname)
                     timer = time.time()
                     self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname,
                                          d_optim=d_optimizer.state_dict(), g_optim=g_optimizer.state_dict())
                 self.count += 1
-        self.writer.close()
+            self.writer.close()
 
-    def train_d(self, epoch_num, mode='Adam',
-                dataname='MNIST', logname='MNIST',
-                overtrain_path=None):
-
+    def train_sgd_d(self, epoch_num, mode='Adam',
+                    dataname='MNIST', logname='MNIST',
+                    overtrain_path=None, compare_weight=None,
+                    info_time=100):
+        path = None
         if overtrain_path is not None:
+            path = overtrain_path
+        if compare_weight is not None:
+            path = compare_weight
+        if path is not None:
             discriminator = dc_D().to(self.device)
-            model_weight = torch.load(overtrain_path)
+            model_weight = torch.load(path)
             discriminator.load_state_dict(model_weight['D'])
             model_vec = torch.cat([p.contiguous().view(-1) for p in discriminator.parameters()])
-            print('Load overtrained discriminator')
+            print('Load discriminator from %s' % path)
 
         print(mode)
-        if mode == 'SGD':
-            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
-            self.writer_init(logname=logname,
-                             comments='SGD-%.3f_%.5f' % (self.lr_d, self.weight_decay))
-        elif mode == 'Adam':
-            d_optimizer = optim.Adam(self.D.parameters(), lr=self.lr_d,
-                                     weight_decay=self.weight_decay,
-                                     betas=(0.5, 0.999))
-            self.writer_init(logname=logname,
-                             comments='ADAM-%.3f_%.5f' % (self.lr_d, self.weight_decay))
-        elif mode == 'RMSProp':
-            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
-            self.writer_init(logname=logname,
-                             comments='RMSProp-%.3f_%.5f' % (self.lr_d, self.weight_decay))
+        d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+        self.writer_init(logname=logname,
+                         comments='SGD-%.3f_%.3f' % (self.lr_d, self.weight_decay))
         timer = time.time()
         d_losses = []
         g_losses = []
@@ -380,12 +468,121 @@ class VisionData():
                 tol_gloss += G_loss.item() * fake_x.shape[0]
                 if self.d_penalty != 0:
                     D_loss += self.l2penalty()
-                if self.count % 2 == 0 and overtrain_path is not None:
+                if overtrain_path is not None and self.count % 2 == 0:
                     self.plot_proj(epoch=self.count, model_vec=model_vec, loss=D_loss)
+                if compare_weight is not None and self.count % info_time == 0:
+                    self.plot_diff(model_vec=model_vec)
                 d_optimizer.zero_grad()
                 zero_grad(self.G.parameters())
                 D_loss.backward()
                 d_optimizer.step()
+                tol_correct += (d_real > 0).sum().item() + (d_fake < 0).sum().item()
+
+                gd = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
+                gg = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]), p=2)
+                self.plot_param(D_loss=D_loss, G_loss=G_loss)
+                self.plot_grad(gd=gd, gg=gg)
+                self.plot_d(d_real, d_fake)
+                if self.count % self.show_iter == 0:
+                    self.show_info(timer=time.time() - timer,
+                                   D_loss=D_loss, G_loss=G_loss,
+                                   logdir=logname)
+                    timer = time.time()
+                self.count += 1
+            tol_loss /= len(self.dataset)
+            tol_gloss /= len(self.dataset)
+            d_losses.append(tol_loss)
+            g_losses.append(tol_gloss)
+            acc = 50.0 * tol_correct / len(self.dataset)
+
+            self.writer.add_scalar('Train/D_Loss', tol_loss, global_step=e)
+            self.writer.add_scalar('Train/G_Loss', tol_gloss, global_step=e)
+            self.writer.add_scalar('Train/Accuracy', acc, global_step=e)
+            print('Epoch :{}/{}, Acc: {}/{}: {:.3f}%, '
+                  'D Loss mean: {:.4f}, G Loss mean: {:.4f}'
+                  .format(e, epoch_num, tol_correct, 2 * len(self.dataset), acc,
+                          tol_loss, tol_gloss))
+            self.save_checkpoint('fixG_%s-%.3f_%d.pth' % (mode, self.lr_d, e),
+                                 dataset=dataname)
+        self.writer.close()
+        return d_losses, g_losses
+
+    def train_d(self, epoch_num, mode='Adam',
+                dataname='MNIST', logname='MNIST',
+                overtrain_path=None, compare_weight=None,
+                his_flag=False, info_time=100,
+                optim_state=None):
+        path = None
+        if overtrain_path is not None:
+            path = overtrain_path
+        if compare_weight is not None:
+            path = compare_weight
+        if path is not None:
+            discriminator = dc_D().to(self.device)
+            model_weight = torch.load(path)
+            discriminator.load_state_dict(model_weight['D'])
+            model_vec = torch.cat([p.contiguous().view(-1) for p in discriminator.parameters()])
+            print('Load discriminator from %s' % path)
+
+        print(mode)
+        if mode == 'SGD':
+            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            self.writer_init(logname=logname,
+                             comments='SGD-%.3f_%.3f' % (self.lr_d, self.weight_decay))
+        elif mode == 'Adam':
+            d_optimizer = Adam(self.D.parameters(), lr=self.lr_d,
+                               weight_decay=self.weight_decay,
+                               betas=(0.5, 0.999))
+            self.writer_init(logname=logname,
+                             comments='ADAM-%.3f_%.5f' % (self.lr_d, self.weight_decay))
+        elif mode == 'RMSProp':
+            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            self.writer_init(logname=logname,
+                             comments='RMSProp-%.3f_%.5f' % (self.lr_d, self.weight_decay))
+
+        if optim_state is not None:
+            chk = torch.load(optim_state)
+            d_optimizer.load_state_dict(chk['D_optim'])
+            print('load optimizer state')
+        timer = time.time()
+        d_losses = []
+        g_losses = []
+        flag = False
+        for e in range(epoch_num):
+            tol_correct = 0
+            tol_loss = 0
+            tol_gloss = 0
+            for real_x in self.dataloader:
+                real_x = real_x[0].to(self.device)
+                d_real = self.D(real_x)
+
+                z = torch.randn((real_x.shape[0], self.z_dim),
+                                device=self.device)  ## changed (shape)
+                fake_x = self.G(z)
+                d_fake = self.D(fake_x)
+
+                # D_loss = gan_loss(d_real, d_fake)
+                D_loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
+                         self.criterion(d_fake, torch.zeros(d_fake.shape, device=self.device))
+                tol_loss += D_loss.item() * real_x.shape[0]
+                G_loss = self.criterion(d_fake, torch.ones(d_fake.shape, device=self.device)).detach_()
+                tol_gloss += G_loss.item() * fake_x.shape[0]
+                if self.d_penalty != 0:
+                    D_loss += self.l2penalty()
+                if overtrain_path is not None and self.count % 2 == 0:
+                    self.plot_proj(epoch=self.count, model_vec=model_vec, loss=D_loss)
+                if compare_weight is not None and self.count % info_time == 0:
+                    self.plot_diff(model_vec=model_vec)
+                d_optimizer.zero_grad()
+                zero_grad(self.G.parameters())
+                D_loss.backward()
+                flag = True if self.count % info_time == 0 else False
+                d_steps, d_updates = d_optimizer.step(info=flag)
+                if flag:
+                    self.plot_optim(d_steps=d_steps, d_updates=d_updates,
+                                    his=his_flag)
 
                 tol_correct += (d_real > 0).sum().item() + (d_fake < 0).sum().item()
 
@@ -419,6 +616,94 @@ class VisionData():
                                  dataset=dataname)
         self.writer.close()
         return d_losses, g_losses
+
+    def train_simul(self, epoch_num, mode='Adam',
+                    dataname='MNIST', logname='MNIST',
+                    compare_weight=None, loss_type='JSD',
+                    his_flag=False, info_time=100,
+                    optim_state=None):
+        if compare_weight is not None:
+            discriminator = dc_D().to(self.device)
+            model_weight = torch.load(compare_weight)
+            discriminator.load_state_dict(model_weight['D'])
+            model_vec = torch.cat([p.contiguous().view(-1) for p in discriminator.parameters()])
+            print('Load discriminator from %s' % compare_weight)
+        print(mode)
+        if mode == 'SGD':
+            d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            g_optimizer = optim.SGD(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
+        elif mode == 'Adam':
+            d_optimizer = Adam(self.D.parameters(), lr=self.lr_d,
+                               weight_decay=self.weight_decay, betas=(0.5, 0.999))
+            g_optimizer = Adam(self.G.parameters(), lr=self.lr_g,
+                               weight_decay=self.weight_decay, betas=(0.5, 0.999))
+        elif mode == 'RMSProp':
+            d_optimizer = RMSprop(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
+            g_optimizer = RMSprop(self.G.parameters(), lr=self.lr_g, weight_decay=self.weight_decay)
+        self.writer_init(logname=logname,
+                         comments='%s-%.3f_%.5f' % (mode, self.lr_d, self.weight_decay))
+        if optim_state is not None:
+            chk = torch.load(optim_state)
+            d_optimizer.load_state_dict(chk['D_optim'])
+            g_optimizer.load_state_dict(chk['G_optim'])
+            print('load optimizer state')
+        timer = time.time()
+        flag = False
+
+        for e in range(epoch_num):
+            for real_x in self.dataloader:
+                if self.count % info_time == 0:
+                    flag = True
+                else:
+                    flag = False
+                real_x = real_x[0].to(self.device)
+                d_real = self.D(real_x)
+
+                z = torch.randn((self.batchsize, self.z_dim),
+                                device=self.device)  ## changed (shape)
+                fake_x = self.G(z)
+                fake_x_c = fake_x.clone().detach()
+                d_fake = self.D(fake_x)
+                if loss_type == 'JSD':
+                    G_loss = self.criterion(d_fake, torch.ones(d_fake.shape, device=self.device))
+                else:
+                    G_loss = - d_fake.mean()
+                g_optimizer.zero_grad()
+                G_loss.backward()
+                g_steps, g_updates = g_optimizer.step(info=flag)
+
+                d_fake_c = self.D(fake_x_c)
+                if loss_type == 'JSD':
+                    loss = self.criterion(d_real, torch.ones(d_real.shape, device=self.device)) + \
+                           self.criterion(d_fake_c, torch.zeros(d_fake_c.shape, device=self.device))
+                else:
+                    loss = d_fake_c.mean() - d_real.mean()
+                D_loss = loss + self.l2penalty()
+                if compare_weight is not None and self.count % info_time == 0:
+                    self.plot_diff(model_vec=model_vec)
+                d_optimizer.zero_grad()
+                D_loss.backward()
+                d_steps, d_updates = d_optimizer.step(info=flag)
+
+                gd = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
+                gg = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]), p=2)
+                if flag:
+                    self.plot_optim(d_steps=d_steps, d_updates=d_updates,
+                                    g_steps=g_steps, g_updates=g_updates,
+                                    his=his_flag)
+                self.plot_param(D_loss=D_loss, G_loss=G_loss)
+                self.plot_grad(gd=gd, gg=gg)
+                self.plot_d(d_real, d_fake)
+
+                if self.count % self.show_iter == 0:
+                    self.show_info(timer=time.time() - timer, D_loss=D_loss, G_loss=G_loss, logdir=logname)
+                    timer = time.time()
+                    self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr_d, self.count), dataset=dataname,
+                                         d_optim=d_optimizer.state_dict(), g_optim=g_optimizer.state_dict())
+                self.count += 1
+        self.writer.close()
 
     def traing(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
         print(mode)
@@ -490,22 +775,38 @@ class VisionData():
 def train_mnist():
     modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
     print(device)
     print('MNIST')
-    lr = 0.0001
+    lr = 0.01
     z_dim = 96
     D = dc_D()
     G = dc_G(z_dim=z_dim)
     dataset = MNIST('./datas/mnist', download=True, train=True, transform=transform)
     trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=128,
-                         lr_d=lr, lr_g=lr, show_iter=500,
+                         lr_d=0.01, lr_g=0.01, show_iter=500,
                          weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim),
                          gp_weight=0)
-    trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='newchk')
-    # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth', count=0, load_d=False, load_g=True)
-    # trainer.train_d(epoch_num=60, mode=modes[3], logname='cosine', dataname='MNIST')
+    chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
+    # trainer.train_sgd(epoch_num=20, mode=modes[2],
+    #                   dataname='MNIST', logname='sgdtest', info_time=100)
+    # trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='test',
+    #                  his_flag=False, info_time=100)
+    trainer.load_checkpoint(chk_path, count=0, load_d=True, load_g=True)
+    trainer.train_sgd_d(epoch_num=30, mode=modes[2],
+                        dataname='MNIST', logname='sgd',
+                        compare_weight=chk_path, info_time=100)
+    # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth', count=0, load_d=True, load_g=True)
+
+    # trainer.train_d(epoch_num=20, mode=modes[3], logname='newover', dataname='MNIST',
+    #                 compare_weight='checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth',
+    #                 his_flag=True, info_time=250,
+    #                 optim_state='checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth')
+    # trainer.train_simul(epoch_num=20, mode=modes[3], logname='newover', dataname='MNIST',
+    #                     compare_weight='checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth',
+    #                     his_flag=True, info_time=100)
     # trainer.train_d(epoch_num=3, mode=modes[3], logname='cosine', dataname='MNIST',
-    #                 overtrain_path='checkpoints/0.00000MNIST-0.0010/fixG_Adam-0.00100_49.pth')
+    #                 overtrain_path='/checkpoints/0.00000MNIST-0.0050/SGD-0.00500_9000.pth')
     # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/backup/epoch21-D1.pth', count=32000, load_d=True, load_g=True)
 
 
@@ -541,10 +842,7 @@ def trains():
     gf.to_csv(r'results/g_loss.csv')
 
 
-
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
     train_mnist()
     # trains()
-
-
