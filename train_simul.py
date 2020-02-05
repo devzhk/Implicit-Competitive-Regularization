@@ -10,10 +10,11 @@ from torch.optim.sgd import SGD
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
-from GANs import dc_G, dc_D
+from GANs import dc_G, dc_D, GoodGenerator, GoodDiscriminator
 from optims.cgd import BCGD
 from train_utils import get_data, weights_init_d, weights_init_g, \
-    get_diff, save_checkpoint
+    get_diff, save_checkpoint, lr_scheduler
+from losses import get_loss
 
 
 def train_mnist(epoch_num=10, show_iter=100, logdir='test',
@@ -50,7 +51,6 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
-    criterion = nn.BCEWithLogitsLoss()
     d_optimizer = SGD(D.parameters(), lr=lr_d)
     g_optimizer = SGD(G.parameters(), lr=lr_g)
     timer = time.time()
@@ -69,7 +69,7 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
             writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
                                                         'Real image': d_real.mean().item()},
                                global_step=count)
-            G_loss = criterion(d_fake, torch.ones(d_fake.shape, device=device))
+            G_loss = get_loss(name='JSD', g_loss=True, d_fake=d_fake)
             g_optimizer.zero_grad()
             G_loss.backward()
             g_optimizer.step()
@@ -77,8 +77,7 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
                 torch.cat([p.grad.contiguous().view(-1) for p in G.parameters()]), p=2)
 
             d_fake_c = D(fake_x_c)
-            D_loss = criterion(d_real, torch.ones(d_real.shape, device=device)) + \
-                     criterion(d_fake_c, torch.zeros(d_fake_c.shape, device=device))
+            D_loss = get_loss(name='JSD', g_loss=False, d_real=d_real, d_fake=d_fake_c)
             if compare_path is not None and count % info_time == 0:
                 diff = get_diff(net=D, model_vec=model_vec)
                 writer.add_scalar('Distance from checkpoint', diff.item(), global_step=count)
@@ -111,18 +110,88 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
     writer.close()
 
 
-def train_cgd(epoch_num=10, show_iter=100, logdir='test', dataname='cifar10',
-              device='cpu'):
-    lr = 0.01
+def train_cgd(epoch_num=10, milestone=None,
+              show_iter=100, logdir='test', dataname='cifar10',
+              device='cpu', gpu_num=1, collect_info=False):
+    lr_d = 0.01
+    lr_g = 0.01
+    batchsize = 128
+    z_dim = 128
+    dataset = get_data(dataname=dataname, path='../datas/%s' % dataname)
+    dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
+                            num_workers=4)
+    D = GoodDiscriminator().to(device)
+    G = GoodGenerator().to(device)
 
-    optimizer = BCGD
+    if gpu_num > 1:
+        D = nn.DataParallel(D, list(range(gpu_num)))
+        G = nn.DataParallel(G, list(range(gpu_num)))
+    D.apply(weights_init_d)
+    G.apply(weights_init_g)
+    from datetime import datetime
+    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
+    writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
+    optimizer = BCGD(max_params=G.parameters(), min_params=D.parameters(),
+                     lr_max=lr_g, lr_min=lr_d, device=device)
+    scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
+    timer = time.time()
+    count = 0
+    fixed_noise = torch.randn((64, z_dim), device=device)
+    for e in range(epoch_num):
+        scheduler.step(epoch=e)
+        for real_x in dataloader:
+            real_x = real_x[0].to(device)
+            d_real = D(real_x)
+            z = torch.randn((d_real.shape[0], z_dim), device=device)
+            fake_x = G(z)
+            d_fake = D(fake_x)
+            loss = get_loss(name='WGAN', g_loss=False, d_real=d_real, d_fake=d_fake)
+            optimizer.zero_grad()
+            optimizer.step(loss)
+
+            if count % show_iter == 0:
+                time_cost = time.time() - timer
+                print('Iter :%d , Loss: %.5f, G_loss: %.5f, time: %.3fs'
+                      % (count, loss.item(), time_cost))
+                timer = time.time()
+                with torch.no_grad():
+                    fake_img = G(fixed_noise).detach()
+                    path = 'figs/%s/' % logdir
+                    if not os.path.exists(path):
+                        os.makedirs(path)
+                    vutils.save_image(fake_img, path + 'iter_%d.png' % count, normalize=True)
+                save_checkpoint(path=logdir,
+                                name='CGD-%.3f%.3f_%d.pth' % (lr_d, lr_g, count),
+                                D=D, G=G)
+            writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
+                                                        'Real image': d_real.mean().item()},
+                               global_step=count)
+            writer.add_scalar('Loss', loss.item(), global_step=count)
+            if collect_info:
+                cgd_info = optimizer.getinfo()
+                writer.add_scalar('Conjugate Gradient/iter num', cgd_info['iter_num'], global_step=count)
+                writer.add_scalar('Conjugate Gradient/running time', cgd_info['time'], global_step=count)
+                writer.add_scalars('Delta', {'D gradient': cgd_info['grad_y'],
+                                             'G gradient': cgd_info['grad_x'],
+                                             'D hvp': cgd_info['hvp_y'],
+                                             'G hvp': cgd_info['hvp_x'],
+                                             'D cg': cgd_info['cg_y'],
+                                             'G cg': cgd_info['cg_x']},
+                                   global_step=count)
+            count += 1
+    writer.close()
+
+
 
 
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
-    # chk_path1 = 'checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth'
-    train_mnist(epoch_num=30, show_iter=500, logdir='sgd',
-                model_weight=chk_path, load_d=True, load_g=True,
-                compare_path=chk_path, info_time=100, device=device)
+    # chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
+
+    # train_mnist(epoch_num=30, show_iter=500, logdir='sgd',
+    #             model_weight=chk_path, load_d=True, load_g=True,
+    #             compare_path=chk_path, info_time=100, device=device)
+
+    train_cgd(epoch_num=20, milestone=(10,), show_iter=500, logdir='test',
+              dataname='CIFAR10', device=device, gpu_num=2, collect_info=True)

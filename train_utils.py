@@ -6,6 +6,19 @@ from torchvision.datasets import CIFAR10, MNIST, LSUN
 from GANs.models import dc_D, dc_G, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
 
 
+class lr_scheduler(object):
+    def __init__(self, optimizer, milestone):
+        self.optim = optimizer
+        self.milestone = milestone
+
+    def step(self, epoch, gamma=10):
+        if epoch in self.milestone:
+            lr_max, lr_min = self.optim.state['lr_max'], self.optim.state['lr_min']
+            lr_max /= gamma
+            lr_min /= gamma
+            self.optim.set_lr(lr_max=lr_max, lr_min=lr_min)
+
+
 def get_diff(net, model_vec):
     current_model = torch.cat([p.contiguous().view(-1) for p in net.parameters()]).detach()
     weight_vec = current_model - model_vec
@@ -38,7 +51,7 @@ def get_data(dataname, path, img_size=64):
                                                       ]),
                         download=True)
     elif dataname == 'LSUN':
-        dataset = LSUN(path, classes=['bedroom_train'], transform=transforms.Compose([
+        dataset = LSUN(path, classes=['dining_room_train'], transform=transforms.Compose([
             transforms.Scale(img_size),
             transforms.CenterCrop(img_size),
             transforms.ToTensor(),
