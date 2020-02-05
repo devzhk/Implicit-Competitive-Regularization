@@ -151,12 +151,12 @@ def train_cgd(epoch_num=10, milestone=None,
 
             if count % show_iter == 0:
                 time_cost = time.time() - timer
-                print('Iter :%d , Loss: %.5f, G_loss: %.5f, time: %.3fs'
+                print('Iter :%d , Loss: %.5f, time: %.3fs'
                       % (count, loss.item(), time_cost))
                 timer = time.time()
                 with torch.no_grad():
                     fake_img = G(fixed_noise).detach()
-                    path = 'figs/%s/' % logdir
+                    path = 'figs/%s_%s/' % (dataname, logdir)
                     if not os.path.exists(path):
                         os.makedirs(path)
                     vutils.save_image(fake_img, path + 'iter_%d.png' % count, normalize=True)

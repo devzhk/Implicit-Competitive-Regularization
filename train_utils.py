@@ -61,7 +61,7 @@ def get_data(dataname, path, img_size=64):
 
 
 def save_checkpoint(path, name, D, G, optimizer=None):
-    chk_name = 'checkpoints/' + path
+    chk_name = 'checkpoints/%s/' % path
     if not os.path.exists(chk_name):
         os.makedirs(chk_name)
     d_state_dict = D.state_dict()
