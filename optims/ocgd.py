@@ -6,17 +6,16 @@ import torch.autograd as autograd
 from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec
 
 
-class ACGD(object):
+class OCGD(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
                  eps=1e-5, beta=0.99,
                  device=torch.device('cpu'),
-                 solve_x=False, collect_info=True):
+                 udpate_min=False, collect_info=True):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
-                      'eps': eps, 'solve_x': solve_x,
-                      'beta': beta, 'step': 0,
+                      'eps': eps, 'beta': beta, 'step': 0,
                       'old_max': None, 'old_min': None,  # start point of CG
                       'sq_exp_avg_max': None, 'sq_exp_avg_min': None}  # save last update
         self.info = {'grad_x': None, 'grad_y': None,
@@ -25,6 +24,7 @@ class ACGD(object):
                      'time': 0, 'iter_num': 0}
         self.device = device
         self.collect_info = collect_info
+        self.update_min = udpate_min
 
     def zero_grad(self):
         zero_grad(self.max_params)
@@ -81,23 +81,21 @@ class ACGD(object):
                             retain_graph=True)  # h_yx * d_x
         p_x = torch.add(grad_x_vec_d, - hvp_x_vec)
         p_y = torch.add(grad_y_vec_d, hvp_y_vec)
-        if self.collect_info:
-            norm_px = torch.norm(hvp_x_vec, p=2).item()
-            norm_py = torch.norm(hvp_y_vec, p=2).item()
-            timer = time.time()
 
-        if self.state['solve_x']:
+        if self.update_min:
             p_y.mul_(lr_min.sqrt())
             cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
                                                         x_params=self.min_params, y_params=self.max_params,
                                                         b=p_y, x=self.state['old_min'],
                                                         lr_x=lr_min, lr_y=lr_max, device=self.device)
             old_min = cg_y.detach_()
+            self.state.update({'old_min': old_min})
             min_update = cg_y.mul(- lr_min.sqrt())
-            hcg = Hvp_vec(grad_y_vec, self.max_params, min_update).detach_()
-            hcg.add_(grad_x_vec_d)
-            max_update = hcg.mul(lr_max)
-            old_max = hcg.mul(lr_max.sqrt())
+            index = 0
+            for p in self.min_params:
+                p.data.add_(min_update[index: index + p.numel()].reshape(p.shape))
+                index += p.numel()
+            assert index == min_update.numel(), 'Minimizer CG size mismatch'
         else:
             p_x.mul_(lr_max.sqrt())
             cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
@@ -105,39 +103,17 @@ class ACGD(object):
                                                         b=p_x, x=self.state['old_max'],
                                                         lr_x=lr_max, lr_y=lr_min, device=self.device)
             old_max = cg_x.detach_()
+            self.state.update({'old_min': old_max})
             max_update = cg_x.mul(lr_max.sqrt())
-            hcg = Hvp_vec(grad_x_vec, self.min_params, max_update).detach_()
-            hcg.add_(grad_y_vec_d)
-            min_update = hcg.mul(- lr_min)
-            old_min = hcg.mul(lr_min.sqrt())
-        self.state.update({'old_max': old_max, 'old_min': old_min,
-                           'sq_exp_avg_max': sq_avg_x, 'sq_exp_avg_min': sq_avg_y})
+            index = 0
+            for p in self.max_params:
+                p.data.add_(max_update[index: index + p.numel()].reshape(p.shape))
+                index += p.numel()
+            assert index == max_update.numel(), 'Maximizer CG size mismatch'
 
-        if self.collect_info:
-            timer = time.time() - timer
-            self.info.update({'time': timer, 'iter_num': iter_num,
-                              'hvp_x': norm_px, 'hvp_y': norm_py})
+        self.state.update({'sq_exp_avg_max': sq_avg_x, 'sq_exp_avg_min': sq_avg_y})
 
-        index = 0
-        for p in self.max_params:
-            p.data.add_(max_update[index: index + p.numel()].reshape(p.shape))
-            index += p.numel()
-        assert index == max_update.numel(), 'Maximizer CG size mismatch'
 
-        index = 0
-        for p in self.min_params:
-            p.data.add_(min_update[index: index + p.numel()].reshape(p.shape))
-            index += p.numel()
-        assert index == min_update.numel(), 'Minimizer CG size mismatch'
-
-        if self.collect_info:
-            norm_gx = torch.norm(grad_x_vec, p=2).item()
-            norm_gy = torch.norm(grad_y_vec, p=2).item()
-            norm_cgx = torch.norm(max_update, p=2).item()
-            norm_cgy = torch.norm(min_update, p=2).item()
-            self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
-                              'cg_x': norm_cgx, 'cg_y': norm_cgy})
-        self.state['solve_x'] = False if self.state['solve_x'] else True
 
 
 
