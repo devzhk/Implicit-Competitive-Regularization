@@ -97,7 +97,7 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
 
 def general_conjugate_gradient(grad_x, grad_y,
                                x_params, y_params, b,
-                               lr_x, lr_y, x=None, nsteps=10,
+                               lr_x, lr_y, x=None, nsteps=None,
                                tol=1e-12, atol=1e-20,
                                device=torch.device('cpu')):
     '''
@@ -118,6 +118,8 @@ def general_conjugate_gradient(grad_x, grad_y,
     '''
     if x is None:
         x = torch.zeros(b.shape[0], device=device)
+    if nsteps is None:
+        nsteps = b.shape[0]
     if grad_x.shape != b.shape:
         raise RuntimeError('CG: hessian vector product shape mismatch')
     lr_x = lr_x.sqrt()

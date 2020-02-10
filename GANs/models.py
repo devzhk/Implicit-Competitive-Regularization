@@ -284,7 +284,7 @@ class DC_discriminatord(nn.Module):
             nn.Dropout2d(),
             # (feature_num * 8) * 4x4
             nn.Conv2d(feature_num * 8, 1, kernel_size=4, stride=1, padding=0, bias=False),
-            # feature_num * 16x16
+            # feature_num *
         )
 
     def forward(self, input):

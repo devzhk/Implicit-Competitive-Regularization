@@ -1,10 +1,9 @@
-import math
 import time
 
 import torch
 import torch.autograd as autograd
 
-from .cgd_utils import conjugate_gradient, general_conjugate_gradient, Hvp_vec, zero_grad
+from .cgd_utils import conjugate_gradient, Hvp_vec, zero_grad
 
 
 class BCGD(object):
@@ -106,14 +105,12 @@ class BCGD(object):
         for p in self.max_params:
             p.data.add_(lr_max * cg_x[index: index + p.numel()].reshape(p.shape))
             index += p.numel()
-        if index != cg_x.numel():
-            raise ValueError('CG size mismatch')
+        assert index == cg_x.numel(), 'Maximizer CG size mismatch'
         index = 0
         for p in self.min_params:
             p.data.add_(- lr_min * cg_y[index: index + p.numel()].reshape(p.shape))
             index += p.numel()
-        if index != cg_y.numel():
-            raise ValueError('CG size mismatch')
+        assert index == cg_y.numel(), 'Minimizer CG size mismatch'
 
         if self.collect_info:
             norm_gx = torch.norm(grad_x_vec, p=2).item()

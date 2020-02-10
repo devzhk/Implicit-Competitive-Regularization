@@ -788,14 +788,14 @@ def train_mnist():
                          weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim),
                          gp_weight=0)
     chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
-    # trainer.train_sgd(epoch_num=20, mode=modes[2],
-    #                   dataname='MNIST', logname='sgdtest', info_time=100)
+    trainer.train_sgd(epoch_num=20, mode=modes[2],
+                      dataname='MNIST', logname='sgdtest', info_time=100)
     # trainer.train_gd(epoch_num=20, mode=modes[3], dataname='MNIST', logname='test',
     #                  his_flag=False, info_time=100)
-    trainer.load_checkpoint(chk_path, count=0, load_d=True, load_g=True)
-    trainer.train_sgd_d(epoch_num=30, mode=modes[2],
-                        dataname='MNIST', logname='sgd',
-                        compare_weight=chk_path, info_time=100)
+    # trainer.load_checkpoint(chk_path, count=0, load_d=True, load_g=True)
+    # trainer.train_sgd_d(epoch_num=30, mode=modes[2],
+    #                     dataname='MNIST', logname='sgd',
+    #                     compare_weight=chk_path, info_time=100)
     # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/Adam-0.00010_9000.pth', count=0, load_d=True, load_g=True)
 
     # trainer.train_d(epoch_num=20, mode=modes[3], logname='newover', dataname='MNIST',

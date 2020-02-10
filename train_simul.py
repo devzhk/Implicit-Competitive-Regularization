@@ -10,16 +10,18 @@ from torch.optim.sgd import SGD
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
-from GANs import dc_G, dc_D, GoodGenerator, GoodDiscriminator
+from GANs import dc_G, dc_D, \
+    GoodGenerator, GoodDiscriminator, \
+    DC_generator, DC_discriminator
 from optims.cgd import BCGD
 from train_utils import get_data, weights_init_d, weights_init_g, \
-    get_diff, save_checkpoint, lr_scheduler
+    get_diff, save_checkpoint, lr_scheduler, generate_data
 from losses import get_loss
 
 
 def train_mnist(epoch_num=10, show_iter=100, logdir='test',
                 model_weight=None, load_d=False, load_g=False,
-                compare_path=None, info_time=100,
+                compare_path=None, info_time=100, run_select=None,
                 device='cpu'):
     lr_d = 0.01
     lr_g = 0.01
@@ -47,6 +49,14 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
         discriminator.load_state_dict(model_weight['D'])
         model_vec = torch.cat([p.contiguous().view(-1) for p in discriminator.parameters()])
         print('Load discriminator from %s' % compare_path)
+    if run_select is not None:
+        fixed_data = torch.load(run_select)
+        real_set = fixed_data['real_set']
+        fake_set = fixed_data['fake_set']
+        real_d = fixed_data['real_d']
+        fake_d = fixed_data['fake_d']
+        fixed_vec = fixed_data['pred_vec']
+        print('load fixed data set')
 
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
@@ -81,6 +91,19 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
             if compare_path is not None and count % info_time == 0:
                 diff = get_diff(net=D, model_vec=model_vec)
                 writer.add_scalar('Distance from checkpoint', diff.item(), global_step=count)
+                if run_select is not None:
+                    with torch.no_grad():
+                        d_real_set = D(real_set)
+                        d_fake_set = D(fake_set)
+                        diff_real = torch.norm(d_real_set - real_d, p=2)
+                        diff_fake = torch.norm(d_fake_set - fake_d, p=2)
+                        d_vec = torch.cat([d_real_set, d_fake_set])
+                        diff = torch.norm(d_vec.sub_(fixed_vec), p=2)
+                        writer.add_scalars('L2 norm of pred difference',
+                                           {'Total': diff.item(),
+                                            'real set': diff_real.item(),
+                                            'fake set': diff_fake.item()},
+                                           global_step=count)
             d_optimizer.zero_grad()
             D_loss.backward()
             d_optimizer.step()
@@ -111,18 +134,22 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
 
 
 def train_cgd(epoch_num=10, milestone=None,
+              loss_name='WGAN', model_name='dc', data_path='None',
               show_iter=100, logdir='test', dataname='cifar10',
               device='cpu', gpu_num=1, collect_info=False):
-    lr_d = 0.01
-    lr_g = 0.01
-    batchsize = 128
-    z_dim = 128
-    dataset = get_data(dataname=dataname, path='../datas/%s' % dataname)
+    lr_d = 0.001
+    lr_g = 0.001
+    batchsize = 64
+    z_dim = 100
+    dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
-    D = GoodDiscriminator().to(device)
-    G = GoodGenerator().to(device)
-
+    if model_name == 'dc':
+        D = GoodDiscriminator().to(device)
+        G = GoodGenerator().to(device)
+    elif model_name == 'DCGAN':
+        D = DC_discriminator().to(device)
+        G = DC_generator(z_dim=z_dim).to(device)
     if gpu_num > 1:
         D = nn.DataParallel(D, list(range(gpu_num)))
         G = nn.DataParallel(G, list(range(gpu_num)))
@@ -136,16 +163,23 @@ def train_cgd(epoch_num=10, milestone=None,
     scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
     timer = time.time()
     count = 0
-    fixed_noise = torch.randn((64, z_dim), device=device)
+    if model_name == 'dc':
+        fixed_noise = torch.randn((64, z_dim), device=device)
+    else:
+        fixed_noise = torch.randn((64, z_dim, 1, 1), device=device)
     for e in range(epoch_num):
         scheduler.step(epoch=e)
+        print('======Epoch: %d / %d======' % (e, epoch_num))
         for real_x in dataloader:
             real_x = real_x[0].to(device)
             d_real = D(real_x)
-            z = torch.randn((d_real.shape[0], z_dim), device=device)
+            if model_name == 'dc':
+                z = torch.randn((d_real.shape[0], z_dim), device=device)
+            else:
+                z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
             fake_x = G(z)
             d_fake = D(fake_x)
-            loss = get_loss(name='WGAN', g_loss=False, d_real=d_real, d_fake=d_fake)
+            loss = get_loss(name=loss_name, g_loss=False, d_real=d_real, d_fake=d_fake)
             optimizer.zero_grad()
             optimizer.step(loss)
 
@@ -182,16 +216,24 @@ def train_cgd(epoch_num=10, milestone=None,
     writer.close()
 
 
-
-
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     # chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
-
-    # train_mnist(epoch_num=30, show_iter=500, logdir='sgd',
+    # generate_data(model_weight=chk_path, path='figs/select/Fixed_1000.pt', device=device)
+    # train_mnist(epoch_num=30, show_iter=500, logdir='select',
     #             model_weight=chk_path, load_d=True, load_g=True,
-    #             compare_path=chk_path, info_time=100, device=device)
+    #             compare_path=chk_path, info_time=100, run_select='figs/select/Fixed_1000.pt',
+    #             device=device)
 
-    train_cgd(epoch_num=20, milestone=(10,), show_iter=500, logdir='test',
-              dataname='CIFAR10', device=device, gpu_num=2, collect_info=True)
+    # train_cgd(epoch_num=40, milestone=(25, 30, 35), show_iter=500, logdir='cifar',
+    #           dataname='CIFAR10', loss_name='WGAN', model_name='dc',
+    #           device=device, gpu_num=2, collect_info=True)
+    milestones = {'1': (0.01, 0.01),
+                  '3': (0.001, 0.001),
+                  '4': (0.0001, 0.0001)}
+    train_cgd(epoch_num=5, milestone=milestones,
+              show_iter=500, logdir='bedroom_test',
+              data_path='lsun', dataname='LSUN-bedroom',
+              loss_name='WGAN', model_name='DCGAN',
+              device=device, gpu_num=2, collect_info=True)
