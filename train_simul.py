@@ -13,9 +13,9 @@ from torch.utils.data import DataLoader
 from GANs import dc_G, dc_D, \
     GoodGenerator, GoodDiscriminator, \
     DC_generator, DC_discriminator
-from optims.cgd import BCGD
+from optims import ACGD, BCGD, ICR
 from train_utils import get_data, weights_init_d, weights_init_g, \
-    get_diff, save_checkpoint, lr_scheduler, generate_data
+    get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler
 from losses import get_loss
 
 
@@ -133,7 +133,7 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
     writer.close()
 
 
-def train_cgd(epoch_num=10, milestone=None,
+def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
               loss_name='WGAN', model_name='dc', data_path='None',
               show_iter=100, logdir='test', dataname='cifar10',
               device='cpu', gpu_num=1, collect_info=False):
@@ -158,9 +158,15 @@ def train_cgd(epoch_num=10, milestone=None,
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
-    optimizer = BCGD(max_params=G.parameters(), min_params=D.parameters(),
-                     lr_max=lr_g, lr_min=lr_d, device=device)
-    scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
+    if optim_type == 'BCGD':
+        optimizer = BCGD(max_params=G.parameters(), min_params=D.parameters(),
+                         lr_max=lr_g, lr_min=lr_d, device=device)
+        scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
+    else:
+        optimizer = ICR(max_params=G.parameters(), min_params=D.parameters(),
+                        lr=lr_d, alpha=lr_g)
+        scheduler = icrScheduler(optimizer, milestone)
+
     timer = time.time()
     count = 0
     if model_name == 'dc':
@@ -229,11 +235,12 @@ if __name__ == '__main__':
     # train_cgd(epoch_num=40, milestone=(25, 30, 35), show_iter=500, logdir='cifar',
     #           dataname='CIFAR10', loss_name='WGAN', model_name='dc',
     #           device=device, gpu_num=2, collect_info=True)
-    milestones = {'1': (0.01, 0.01),
-                  '3': (0.001, 0.001),
-                  '4': (0.0001, 0.0001)}
-    train_cgd(epoch_num=5, milestone=milestones,
-              show_iter=500, logdir='bedroom_test',
-              data_path='lsun', dataname='LSUN-bedroom',
-              loss_name='WGAN', model_name='DCGAN',
+    milestones = {'20': (0.01, 5),
+                  '25': (0.001, 5),
+                  '30': (0.0001, 5)}
+    train_cgd(epoch_num=35, milestone=milestones,
+              optim_type='ICR',
+              show_iter=500, logdir='ICRtest',
+              data_path='cifar10', dataname='CIFAR10',
+              loss_name='WGAN', model_name='dc',
               device=device, gpu_num=2, collect_info=True)

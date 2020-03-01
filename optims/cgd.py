@@ -9,7 +9,7 @@ from .cgd_utils import conjugate_gradient, Hvp_vec, zero_grad
 class BCGD(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
-                 momentum=0, device=torch.device('cpu'),
+                 momentum=0.0, device=torch.device('cpu'),
                  solve_x=False, collect_info=True):
         self.max_params = list(max_params)
         self.min_params = list(min_params)

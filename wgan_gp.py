@@ -2,19 +2,22 @@ import csv
 import os
 import time
 import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 from torch.nn import functional as F
+
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from torchvision.models.inception import inception_v3
+import torchvision.utils as vutils
 
 from GANs.models import GoodGenerator, GoodDiscriminator
+from utils import prepare_parser
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def transform(x):
@@ -42,30 +45,37 @@ def weights_init_g(m):
 
 
 class WGAN_GP():
-    def __init__(self, D, G, device, dataset, z_dim=8, batchsize=256, lr=0.1, show_iter=100,
-                 gp_weight=10.0,
-                 d_penalty=0.0, d_iter=1, noise_shape=(64, 8)):
-        self.lr = lr
+    def __init__(self, D, G, device, dataset, z_dim=8, batchsize=256,
+                 lr_d=1e-3, lr_g=1e-3, show_iter=100,
+                 gp_weight=10.0, d_penalty=0.0, d_iter=1,
+                 noise_shape=(64, 8), gpu_num=1):
+        self.lr_d = lr_d
+        self.lr_g = lr_g
         self.batchsize = batchsize
         self.show_iter = show_iter
         self.device = device
         self.z_dim = z_dim
         self.count = 0
+        self.gradient_calls = 0
         self.gp_weight = gp_weight
         self.d_penalty = d_penalty
         self.d_iter = d_iter
-        self.dataloader = DataLoader(dataset=dataset, batch_size=self.batchsize, shuffle=True,
-                                     pin_memory=True, drop_last=True)
-        print('learning rate: %.5f \n'
+        self.dataloader = DataLoader(dataset=dataset, batch_size=self.batchsize,
+                                     shuffle=True, drop_last=True)
+        print('Discriminator learning rate: %.5f \n'
+              'Generator learning rate: %.5f \n'
               'l2 penalty on discriminator: %.5f\n'
               'gradient penalty weight: %.3f'
-              % (self.lr, self.d_penalty, self.gp_weight))
+              % (self.lr_d, self.lr_g, self.d_penalty, self.gp_weight))
         self.D = D.to(self.device)
         self.G = G.to(self.device)
+        if gpu_num > 1:
+            self.D = nn.DataParallel(self.D, list(range(gpu_num)))
+            self.G = nn.DataParallel(self.G, list(range(gpu_num)))
         self.D.apply(weights_init_d)
         self.G.apply(weights_init_g)
-        self.d_optim = optim.Adam(self.D.parameters(), lr=self.lr, betas=(0.5, 0.99))
-        self.g_optim = optim.Adam(self.G.parameters(), lr=self.lr, betas=(0.5, 0.99))
+        self.d_optim = optim.Adam(self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.99))
+        self.g_optim = optim.Adam(self.G.parameters(), lr=self.lr_g, betas=(0.5, 0.99))
         self.criterion = nn.BCEWithLogitsLoss()
         self.fixed_noise = torch.randn(noise_shape, device=device)
 
@@ -74,14 +84,25 @@ class WGAN_GP():
         current_time = datetime.now().strftime('%b%d_%H-%M-%S')
         path = ('logs/%s/' % logname) + current_time + '_' + comments
         self.writer = SummaryWriter(logdir=path)
+        feildnames = ['iter', 'is_mean', 'is_std', 'FID score', 'time', 'gradient calls']
+        self.f = open(path + '/metrics.csv', 'w')
+        self.iswriter = csv.DictWriter(self.f, feildnames)
 
     def save_checkpoint(self, path, dataset):
-        chk_name = 'checkpoints/%s-%.5f/' % (dataset, self.lr)
+        chk_name = 'rebuttal/%s-%.5f/' % (dataset, self.lr_d)
         if not os.path.exists(chk_name):
-            os.mkdir(chk_name)
+            os.makedirs(chk_name)
+        try:
+            d_state_dict = self.D.module.state_dict()
+            g_state_dict = self.G.module.state_dict()
+        except AttributeError:
+            d_state_dict = self.D.state_dict()
+            g_state_dict = self.G.state_dict()
         torch.save({
-            'D': self.D.state_dict(),
-            'G': self.G.state_dict(),
+            'D': d_state_dict,
+            'G': g_state_dict,
+            'D_optimizer': self.d_optim.state_dict(),
+            'G_optimizer': self.g_optim.state_dict()
         }, chk_name + path)
         print('save models at %s' % chk_name + path)
 
@@ -142,7 +163,7 @@ class WGAN_GP():
             self.writer.add_scalars('Loss', {'gradient penalty': gradient_penalty.item()},
                                     self.count)
             d_loss = d_loss + gradient_penalty
-        if d_penalty is not None:
+        if d_penalty != 0.0:
             l2_penalty = self.l2_penalty(d_penalty)
             self.writer.add_scalars('Loss', {'l2 penalty': l2_penalty.item()}, self.count)
             d_loss = d_loss + l2_penalty
@@ -178,15 +199,10 @@ class WGAN_GP():
         if self.count % self.show_iter == 0:
             print('Iter: %d, G loss: %.5f ' % (self.count, g_loss.item()))
 
-    def train_epoch(self, epoch_num=10, dirname='WGANGP', dataname='CIFAR10', gp=True,
-                    d_penalty=None):
+    def train_epoch(self, is_flag, fid_flag,
+                    epoch_num=10, dirname='WGANGP', dataname='CIFAR10',
+                    gp=True, d_penalty=None):
         self.writer_init(logname=dirname, comments=dataname)
-        feildnames = ['iter', 'is_mean', 'is_std', 'time']
-        if not os.path.exists("results"):
-            os.mkdir("results")
-        path = 'results/wgangp_inception_score.csv'
-        f = open(path, 'w')
-        self.iswriter = csv.DictWriter(f, feildnames)
         self.iswriter.writeheader()
         start = time.time()
         timer = time.time()
@@ -202,36 +218,61 @@ class WGAN_GP():
                     img = self.G(self.fixed_noise).detach()
                     img = detransform(img)
                     self.writer.add_images('Generated images', img, global_step=self.count)
+
+                    path = 'figs/%s/' % dirname
+                    if not os.path.exists(path):
+                        os.makedirs(path)
+                    vutils.save_image(img, path + 'iter_%d.png' % self.count)
                     timer = time.time()
-                if self.count % 10000 == 0:
+                if self.count % 5000 == 0:
                     with torch.no_grad():
-                        score_mean, score_std = self.get_inception_score(batch_num=500)
-                        np.set_printoptions(precision=4)
-                        print('inception score mean: {}, std: {}'.format(score_mean, score_std))
-                        self.iswriter.writerow(
-                            {'iter': self.count, 'is_mean': score_mean, 'is_std': score_std,
-                             'time': time.time() - start})
-                        self.writer.add_scalars('Inception scores', {'mean': score_mean},
-                                                self.count)
+                        content = {'iter': self.count,
+                                   'time': time.time() - start}
+                        if is_flag:
+                            inception_score = self.get_inception_score(batch_num=500)
+                            np.set_printoptions(precision=4)
+                            print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
+                            content.update({'is_mean': inception_score[0],
+                                            'is_std': inception_score[1]})
+                            self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
+                        # if fid_flag:
+                        #     fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
+                        #     np.set_printoptions(precision=4)
+                        #     print('FID score: {}'.format(fid_score))
+                        #     content.update({'FID score': fid_score})
+                        #     self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
+                        self.iswriter.writerow(content)
+                        self.f.flush()
+                    self.save_checkpoint(path='wgan-%.5f_%d.pth' % (self.lr_d, self.count),
+                                         dataset=dataname)
                 self.count += 1
+        self.f.close()
 
 
-def train_cifar():
+def train_cifar(config):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
     print('CIFAR10')
-    learning_rate = 0.0001
-    batch_size = 64
-    z_dim = 128
+    # learning_rate = 0.0001
+    # batch_size = 64
+    # z_dim = 128
     D = GoodDiscriminator()
     G = GoodGenerator()
-    dataset = CIFAR10(root='datas/cifar10', train=True, transform=transform, download=True)
-    trainer = WGAN_GP(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=batch_size,
-                      lr=learning_rate,
-                      show_iter=500, gp_weight=10, d_penalty=0.0, d_iter=5, noise_shape=(64, z_dim))
-    trainer.train_epoch(epoch_num=3000, dirname='WGAN-GP', dataname='CIFAR10', gp=True,
-                        d_penalty=None)
+    dataset = CIFAR10(root='../datas/cifar10', train=True, transform=transform, download=True)
+    trainer = WGAN_GP(D=D, G=G, device=device, dataset=dataset, z_dim=config['z_dim'], batchsize=config['batchsize'],
+                      lr_d=config['lr_d'], lr_g=config['lr_g'],
+                      show_iter=config['show_iter'],
+                      gp_weight=config['gp_weight'], d_penalty=config['d_penalty'],
+                      d_iter=config['d_iter'], noise_shape=(64, config['z_dim']),
+                      gpu_num=config['gpu_num'])
+    trainer.train_epoch(is_flag=config['eval_is'], fid_flag=config['eval_fid'],
+                        epoch_num=config['epoch_num'], dirname=config['logdir'], dataname=config['dataset'],
+                        gp=True, d_penalty=config['d_penalty'])
 
 
 if __name__ == '__main__':
-    train_cifar()
+    torch.backends.cudnn.benchmark = True
+    parser = prepare_parser()
+    config = vars(parser.parse_args())
+    print(config)
+    train_cifar(config)

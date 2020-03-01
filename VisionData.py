@@ -1,7 +1,7 @@
 import csv
 import os
 import time
-import matplotlib.pyplot as plt
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,9 +18,8 @@ from torchvision.models.inception import inception_v3
 
 from GANs.models import dc_D, dc_G, dc_d, dc_g, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
 from optims import BCGD, ACGD, OCGD
-from CGDs.cgd_utils import zero_grad
+from optims.cgd_utils import zero_grad
 from utils import prepare_parser
-from metrics.cifar10 import cal_inception_score, cal_fid_score
 
 seed = torch.randint(0, 1000000, (1,))
 # bad seeds: 850527
@@ -41,13 +40,13 @@ def detransform(x):
 def weights_init_d(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.01)
+        nn.init.normal_(m.weight.data, 0.0, 0.005)
 
 
 def weights_init_g(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.01)
+        nn.init.normal_(m.weight.data, 0.0, 0.005)
 
 
 class VisionData():
@@ -174,7 +173,7 @@ class VisionData():
         self.writer = SummaryWriter(logdir=path)
         feildnames = ['iter', 'is_mean', 'is_std', 'FID score','time', 'gradient calls']
         self.f = open(path + '/metrics.csv', 'w')
-        self.iswriter = csv.DictWriter(self.f, feildnames)
+        self. iswriter = csv.DictWriter(self.f, feildnames)
 
     def show_info(self, timer, logdir, D_loss=None, G_loss=None):
         if G_loss is not None:
@@ -189,11 +188,11 @@ class VisionData():
         try:
             self.writer.add_images('Generated images', fake_data, global_step=self.count,
                                    dataformats='NCHW')
+        except Exception as e:
             path = 'figs/%s/' % logdir
             if not os.path.exists(path):
                 os.makedirs(path)
             vutils.save_image(fake_data, path + 'iter_%d.png' % self.count)
-        except Exception as e:
             print(type(e))
             print('Fail to plot')
 
@@ -203,9 +202,13 @@ class VisionData():
             self.count, D_loss.item(), G_loss.item(), timer))
         else:
             print('Iter : %d, Loss: %.5f, time: %.3fs' % (self.count, D_loss.item(), timer))
-        fake_data = self.G(self.fixed_noise).detach()
-        fake_data = detransform(fake_data)
-        vutils.save_image(fake_data, 'figs/cifar10/iter-%d.png' % self.count)
+        path = 'figs/cifar10/'
+        if not os.path.exists(path):
+            os.makedirs(path)
+        with torch.no_grad():
+            fake_data = self.G(self.fixed_noise).detach()
+            fake_data = detransform(fake_data)
+            vutils.save_image(fake_data, 'figs/cifar10/iter-%d.png' % self.count)
 
     def plot_d(self, d_real, d_fake):
         self.writer.add_scalars('Discriminator output',
@@ -317,17 +320,21 @@ class VisionData():
                    loss_type='JSD'):
         timer = time.time()
         start = time.time()
-        if collect_info:
-            self.writer_init(logname=logname, comments='%s-%.4fDP%.4fGP%.4f%.5f' % (
-            mode, self.lr, self.d_penalty, self.g_penalty, self.weight_decay))
-            self.iswriter.writeheader()
+
+        self.writer_init(logname=logname, comments='%s-%.4fDP%.4fGP%.4f%.5f' % (
+        mode, self.lr, self.d_penalty, self.g_penalty, self.weight_decay))
+        self.iswriter.writeheader()
         if mode == 'BCGD':
-            optimizer = BCGD(max_params=list(self.G.parameters()),
-                             min_params=list(self.D.parameters()), lr=self.lr,
-                             weight_decay=self.weight_decay, device=self.device, solve_x=False,
+            optimizer = BCGD(max_params=self.G.parameters(),
+                             min_params=self.D.parameters(),
+                             lr_max=self.lr, lr_min=self.lr,
+                             device=self.device, solve_x=False,
                              collect_info=collect_info)
         elif mode == 'ACGD':
-            optimizer = ACGD(max_params=self.G, min_params=self.D, lr=self.lr, device=self.device,
+            optimizer = ACGD(max_params=self.G.parameters(),
+                             min_params=self.D.parameters(),
+                             lr_max=self.lr, lr_min=self.lr,
+                             device=self.device,
                              solve_x=False, collect_info=collect_info)
         for e in range(epoch_num):
             for real_x in self.dataloader:
@@ -367,25 +374,26 @@ class VisionData():
                     self.writer.add_scalars('CG running time', {'A ** -1 * b': time_cg}, self.count)
 
                 self.count += 1
-                if self.count % 4000 == 0:
-                    content = {'iter': self.count,
-                               'time': time.time() - start,
-                               'gradient calls': 2 * iter_num + 4}
-                    if is_flag:
-                        inception_score = cal_inception_score(G=self.G, device=self.device, z_dim=self.z_dim)
-                        np.set_printoptions(precision=4)
-                        print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
-                        content.update({'is_mean': inception_score[0],
-                                        'is_std': inception_score[1]})
-                        self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
-                    if fid_flag:
-                        fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
-                        np.set_printoptions(precision=4)
-                        print('FID score: {}'.format(fid_score))
-                        content.update({'FID score': fid_score})
-                        self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
-                    self.iswriter.writerow(content)
-                    self.f.flush()
+                if self.count % 5000 == 0:
+                    with torch.no_grad():
+                        content = {'iter': self.count,
+                                   'time': time.time() - start,
+                                   'gradient calls': 2 * iter_num + 4}
+                        if is_flag:
+                            inception_score = self.get_inception_score(batch_num=500)
+                            np.set_printoptions(precision=4)
+                            print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
+                            content.update({'is_mean': inception_score[0],
+                                            'is_std': inception_score[1]})
+                            self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
+                        # if fid_flag:
+                        #     fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
+                        #     np.set_printoptions(precision=4)
+                        #     print('FID score: {}'.format(fid_score))
+                        #     content.update({'FID score': fid_score})
+                        #     self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
+                        self.iswriter.writerow(content)
+                        self.f.flush()
                     self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr, self.count), dataset=dataname)
         self.save_checkpoint('%s-%.5f_%d.pth' % (mode, self.lr, self.count), dataset=dataname)
         self.f.close()
@@ -557,8 +565,8 @@ class VisionData():
         self.writer_init(logname=logname, comments='%.4fDP%.4fGP%.4f%.5f' % (
         self.lr, self.d_penalty, self.g_penalty, self.weight_decay))
         if update_D:
-            optimizer = OCGD(max_params=list(self.G.parameters()),
-                             min_params=list(self.D.parameters()), update_min=update_D,
+            optimizer = OCGD(max_params=self.G.parameters(),
+                             min_params=self.D.parameters(), update_min=update_D,
                              device=self.device, collect_info=True)
         else:
             optimizer = OCGD(max_params=list(self.D.parameters()),
@@ -656,7 +664,7 @@ def train_wgan(config):
     else:
         D = GoodDiscriminator()
     G = GoodGenerator()
-    dataset = CIFAR10(root='datas/cifar10', download=True, train=True, transform=transform)
+    dataset = CIFAR10(root='../datas/cifar10', download=True, train=True, transform=transform)
     trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=config['z_dim'],
                          batchsize=config['batchsize'], lr=config['lr_d'],
                          show_iter=config['show_iter'], weight_decay=0.0,
@@ -675,8 +683,7 @@ def train_wgan(config):
     # trainer.train_bcgd(epoch_num=120, mode='ACGD', collect_info=True, dataname='CIFAR10-WGAN', logname='CIFAR10-WGAN', loss_type='WGAN')
 
     # trainer.train_gd(epoch_num=600, mode=modes[3], dataname='CIFAR10-JSD', logname='CIFAR10-JSD', loss_type='JSD')
-    # uncomment to train GAN with Adam
-    # 595605 to reproduce
+
 
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True

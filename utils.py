@@ -33,7 +33,7 @@ def prepare_parser():
     parser.add_argument(
         '--dataset', type=str, default='CIFAR10')
     parser.add_argument(
-        '--datapath', type=str, default='./datas'
+        '--datapath', type=str, default='../datas'
     )
     parser.add_argument(
         '--model', type=str, default='DCGAN')

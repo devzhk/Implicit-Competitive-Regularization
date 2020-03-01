@@ -45,6 +45,17 @@ def generate_data(model_weight, path, z_dim=96, device='cpu'):
         vutils.save_image(fake_set[j: j + 100], 'figs/select/fake_set_%d.png' % i, nrow=10, normalize=True)
 
 
+class icrScheduler(object):
+    def __init__(self, optimizer, milestone):
+        self.optim = optimizer
+        self.milestone = milestone
+
+    def step(self, epoch):
+        if str(epoch) in self.milestone:
+            self.optim.set_state({'lr': self.milestone[0],
+                                  'alpha': self.milestone[1]})
+
+
 class lr_scheduler(object):
     def __init__(self, optimizer, milestone):
         self.optim = optimizer
@@ -52,7 +63,6 @@ class lr_scheduler(object):
 
     def step(self, epoch, gamma=10):
         if str(epoch) in self.milestone:
-            # lr_max, lr_min = self.optim.state['lr_max'], self.optim.state['lr_min']
             self.optim.set_lr(lr_max=self.milestone[0],
                               lr_min=self.milestone[1])
 
@@ -153,8 +163,8 @@ def model_init(D=None, G=None, init_d=False, init_g=False):
 
 
 def select_n_random(data, n=100):
-    '''
-    Selects n random datapoints and their corresponding labels from a dataset
-    '''
+    """
+    Selects n random data points and their corresponding labels from a dataset
+    """
     perm = torch.randperm(len(data))
     return data[perm][:n]
