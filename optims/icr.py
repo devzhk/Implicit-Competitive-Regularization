@@ -33,6 +33,7 @@ class ICR(object):
 
     def set_state(self, new_state):
         self.state.update(new_state)
+        print('Current state: {}'.format(new_state))
 
     def get_info(self):
         if self.info['grad_x'] is None:

@@ -140,7 +140,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
     lr_d = 0.001
     lr_g = 0.001
     batchsize = 64
-    z_dim = 100
+    z_dim = 128
     dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
@@ -164,7 +164,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
         scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
     else:
         optimizer = ICR(max_params=G.parameters(), min_params=D.parameters(),
-                        lr=lr_d, alpha=lr_g)
+                        lr=lr_d, alpha=1.0, device=device)
         scheduler = icrScheduler(optimizer, milestone)
 
     timer = time.time()
@@ -208,7 +208,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
                                global_step=count)
             writer.add_scalar('Loss', loss.item(), global_step=count)
             if collect_info:
-                cgd_info = optimizer.getinfo()
+                cgd_info = optimizer.get_info()
                 writer.add_scalar('Conjugate Gradient/iter num', cgd_info['iter_num'], global_step=count)
                 writer.add_scalar('Conjugate Gradient/running time', cgd_info['time'], global_step=count)
                 writer.add_scalars('Delta', {'D gradient': cgd_info['grad_y'],
@@ -225,6 +225,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    print(device)
     # chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
     # generate_data(model_weight=chk_path, path='figs/select/Fixed_1000.pt', device=device)
     # train_mnist(epoch_num=30, show_iter=500, logdir='select',
@@ -235,12 +236,12 @@ if __name__ == '__main__':
     # train_cgd(epoch_num=40, milestone=(25, 30, 35), show_iter=500, logdir='cifar',
     #           dataname='CIFAR10', loss_name='WGAN', model_name='dc',
     #           device=device, gpu_num=2, collect_info=True)
-    milestones = {'20': (0.01, 5),
-                  '25': (0.001, 5),
-                  '30': (0.0001, 5)}
-    train_cgd(epoch_num=35, milestone=milestones,
+    milestones = {'0': (0.01, 1),
+                  '5': (0.001, 1),
+                  '10': (0.001, 1)}
+    train_cgd(epoch_num=15, milestone=milestones,
               optim_type='ICR',
-              show_iter=500, logdir='ICRtest',
+              show_iter=100, logdir='ICRtest',
               data_path='cifar10', dataname='CIFAR10',
               loss_name='WGAN', model_name='dc',
               device=device, gpu_num=2, collect_info=True)

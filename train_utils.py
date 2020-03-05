@@ -51,9 +51,10 @@ class icrScheduler(object):
         self.milestone = milestone
 
     def step(self, epoch):
-        if str(epoch) in self.milestone:
-            self.optim.set_state({'lr': self.milestone[0],
-                                  'alpha': self.milestone[1]})
+        e_key = str(epoch)
+        if e_key in self.milestone:
+            self.optim.set_state({'lr': self.milestone[e_key][0],
+                                  'alpha': self.milestone[e_key][1]})
 
 
 class lr_scheduler(object):
@@ -62,9 +63,10 @@ class lr_scheduler(object):
         self.milestone = milestone
 
     def step(self, epoch, gamma=10):
-        if str(epoch) in self.milestone:
-            self.optim.set_lr(lr_max=self.milestone[0],
-                              lr_min=self.milestone[1])
+        e_key = str(epoch)
+        if e_key in self.milestone:
+            self.optim.set_lr(lr_max=self.milestone[e_key][0],
+                              lr_min=self.milestone[e_key][1])
 
 
 def get_diff(net, model_vec):
@@ -92,12 +94,14 @@ def get_data(dataname, path, img_size=64):
                                                         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                                                         ]),
                           download=True)
+        print('CIFAR10')
     elif dataname == 'MNIST':
         dataset = MNIST(path, train=True,
                         transform=transforms.Compose([transforms.ToTensor(),
                                                       transforms.Normalize((0.5,), (0.5,))
                                                       ]),
                         download=True)
+        print('MNIST')
     elif dataname == 'LSUN-dining':
         dataset = LSUN(path, classes=['dining_room_train'], transform=transforms.Compose([
             transforms.Resize(img_size),
@@ -105,6 +109,7 @@ def get_data(dataname, path, img_size=64):
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ]))
+        print('LSUN-dining')
     elif dataname == 'LSUN-bedroom':
         dataset = LSUN(path, classes=['bedroom_train'], transform=transforms.Compose([
             transforms.Resize(img_size),
@@ -112,6 +117,7 @@ def get_data(dataname, path, img_size=64):
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ]))
+        print('LSUN-bedroom')
     return dataset
 
 

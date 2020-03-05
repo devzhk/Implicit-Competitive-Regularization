@@ -8,7 +8,7 @@ def conjugate_gradient(grad_x, grad_y,
                        b, x=None, nsteps=10,
                        tol=1e-12, atol=1e-20,
                        lr_x=1.0, lr_y=1.0, device=torch.device('cpu')):
-    '''
+    """
     :param grad_x:
     :param grad_y:
     :param x_params:
@@ -20,8 +20,8 @@ def conjugate_gradient(grad_x, grad_y,
 
     h_1 = D_yx * p
     h_2 = D_xy * D_yx * p
-    A = I + lr ** 2 * D_xy * D_yx * p
-    '''
+    A = I + lr_x * D_xy * lr_y * D_yx
+    """
     if x is None:
         x = torch.zeros(b.shape[0], device=device)
     r = b.clone().detach()

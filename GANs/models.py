@@ -37,19 +37,19 @@ class GoodDiscriminator(nn.Module):
         super(GoodDiscriminator, self).__init__()
         self.main_module = nn.Sequential(
             nn.Conv2d(3, DIM, kernel_size=4, stride=2, padding=1),
-            # nn.BatchNorm2d(DIM),
+            nn.BatchNorm2d(DIM),
             nn.LeakyReLU(),
             # nn.Softplus(),
             # nn.Dropout2d(),
             # 16x16
             nn.Conv2d(DIM, 2 * DIM, kernel_size=4, stride=2, padding=1),
-            # nn.BatchNorm2d(2 * DIM),
+            nn.BatchNorm2d(2 * DIM),
             nn.LeakyReLU(),
             # nn.Softplus(),
             # nn.Dropout2d(),
             # 8x8
             nn.Conv2d(2 * DIM, 4 * DIM, kernel_size=4, stride=2, padding=1),
-            # nn.BatchNorm2d(4 * DIM),
+            nn.BatchNorm2d(4 * DIM),
             nn.LeakyReLU(),
             # nn.Softplus(),
             # nn.Dropout2d(),

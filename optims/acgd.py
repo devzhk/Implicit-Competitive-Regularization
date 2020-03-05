@@ -30,7 +30,7 @@ class ACGD(object):
         zero_grad(self.max_params)
         zero_grad(self.min_params)
 
-    def getinfo(self):
+    def get_info(self):
         if self.info['grad_x'] is None:
             print('Warning! No update information stored. Set collect_info=True before call this method')
         return self.info
