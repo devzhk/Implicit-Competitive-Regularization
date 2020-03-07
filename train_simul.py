@@ -236,11 +236,11 @@ if __name__ == '__main__':
     # train_cgd(epoch_num=40, milestone=(25, 30, 35), show_iter=500, logdir='cifar',
     #           dataname='CIFAR10', loss_name='WGAN', model_name='dc',
     #           device=device, gpu_num=2, collect_info=True)
-    milestones = {'0': (0.01, 1),
-                  '5': (0.001, 1),
-                  '10': (0.001, 1)}
+    milestones = {'0': (0.01, 0.01),
+                  '5': (0.001, 0.001),
+                  '10': (0.001, 0.001)}
     train_cgd(epoch_num=15, milestone=milestones,
-              optim_type='ICR',
+              optim_type='BCGD',
               show_iter=100, logdir='ICRtest',
               data_path='cifar10', dataname='CIFAR10',
               loss_name='WGAN', model_name='dc',

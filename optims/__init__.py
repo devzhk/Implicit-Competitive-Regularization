@@ -1,4 +1,4 @@
-from .cgd import BCGD
+from .cgd import BCGD, BCGD2
 from .icr import ICR
 from .adam import Adam, RAdam
 from .acgd import ACGD

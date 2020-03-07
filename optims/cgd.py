@@ -120,3 +120,86 @@ class BCGD(object):
             self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
                               'cg_x': norm_cgx, 'cg_y': norm_cgy})
         self.state['solve_x'] = False if self.state['solve_x'] else True
+
+
+class BCGD2(object):
+    def __init__(self, max_params, min_params,
+                 lr_max=1e-3, lr_min=1e-3, device=torch.device('cpu'),
+                 update_max=False, collect_info=True):
+        self.max_params = list(max_params)
+        self.min_params = list(min_params)
+        self.device = device
+        self.collect_info = collect_info
+        self.state = {'lr_max': lr_max, 'lr_min': lr_min,
+                      'update_max': update_max, 'old': None}
+        self.info = {'grad_x': None, 'grad_y': None, 'iter_num': 0}
+
+    def zero_grad(self):
+        zero_grad(self.max_params)
+        zero_grad(self.min_params)
+
+    def get_info(self):
+        if self.info['grad_x'] is None:
+            print('Warning! No update information stored. Set collect_info=True before call this method')
+        return self.info
+
+    def state_dict(self):
+        return self.state
+
+    def load_state_dict(self, state_dict):
+        self.state.update(state_dict)
+        print('Load state: {}'.format(state_dict))
+
+    def set_lr(self, lr_max, lr_min):
+        self.state.update({'lr_max': lr_max, 'lr_min': lr_min})
+        print('Maximizing side learning rate: {:.4f}\n '
+              'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
+
+    def step(self, loss):
+        lr_max = self.state['lr_max']
+        lr_min = self.state['lr_min']
+        grad_x = autograd.grad(loss, self.max_params, create_graph=True, retain_graph=True)
+        grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
+        grad_y = autograd.grad(loss, self.min_params, create_graph=True, retain_graph=True)
+        grad_y_vec = torch.cat([g.contiguous().view(-1) for g in grad_y])
+        grad_x_vec_d = grad_x_vec.clone().detach()
+        grad_y_vec_d = grad_y_vec.clone().detach()
+
+        if self.state['update_max']:
+            hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, grad_y_vec_d,
+                                retain_graph=True)  # h_xy * d_y
+            p_x = torch.add(grad_x_vec_d, - lr_min * hvp_x_vec).detach_()
+            cg_x, iter_num = conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                                                x_params=self.max_params,
+                                                y_params=self.min_params, b=p_x, x=self.state['old'],
+                                                nsteps=p_x.shape[0],
+                                                lr_x=lr_max, lr_y=lr_min, device=self.device)
+            cg_x.detach_()
+            index = 0
+            for p in self.max_params:
+                p.data.add_(lr_max * cg_x[index: index + p.numel()].reshape(p.shape))
+                index += p.numel()
+            assert index == cg_x.numel(), 'Maximizer CG size mismatch'
+            self.state.update({'old': cg_x})
+        else:
+            hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, grad_x_vec_d,
+                                retain_graph=True)  # h_yx * d_x
+            p_y = torch.add(grad_y_vec_d, lr_max * hvp_y_vec).detach_()
+            cg_y, iter_num = conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                                                x_params=self.min_params,
+                                                y_params=self.max_params, b=p_y, x=self.state['old_min'],
+                                                nsteps=p_y.shape[0],
+                                                lr_x=lr_max, lr_y=lr_min,
+                                                device=self.device)
+            cg_y.detach_()
+            index = 0
+            for p in self.min_params:
+                p.data.add_(- lr_min * cg_y[index: index + p.numel()].reshape(p.shape))
+                index += p.numel()
+            assert index == cg_y.numel(), 'Minimizer CG size mismatch'
+            self.state.update({'old': cg_y})
+        if self.collect_info:
+            norm_gx = torch.norm(grad_x_vec, p=2).item()
+            norm_gy = torch.norm(grad_y_vec, p=2).item()
+            self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
+                              'iter_num': iter_num})

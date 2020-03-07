@@ -11,6 +11,7 @@ from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D
+from optims import BCGD2
 from utils import train_seq_parser
 from train_utils import get_data, save_checkpoint, detransform, \
     weights_init_d, weights_init_g, get_diff
@@ -22,7 +23,7 @@ torch.manual_seed(seed=seed)
 print('random seed : %d' % seed)
 
 
-def train_d(epoch_num=10, logdir='test',
+def train_d(epoch_num=10, logdir='test', optim='SGD',
             loss_name='JSD', show_iter=500,
             model_weight=None, load_d=False, load_g=False,
             compare_path=None, info_time=100, run_select=None,
@@ -64,7 +65,12 @@ def train_d(epoch_num=10, logdir='test',
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
-    d_optimizer = SGD(D.parameters(), lr=lr_d)
+    if optim == 'SGD':
+        d_optimizer = SGD(D.parameters(), lr=lr_d)
+    else:
+        d_optimizer = BCGD2(max_params=G.parameters(), min_params=D.parameters(),
+                            lr_max=lr_g, lr_min=lr_d, update_max=False,
+                            device=device, collect_info=True)
     timer = time.time()
     count = 0
     d_losses = []
@@ -100,15 +106,19 @@ def train_d(epoch_num=10, logdir='test',
                                             'fake set': diff_fake.item()},
                                            global_step=count)
             d_optimizer.zero_grad()
-            D_loss.backward()
-            d_optimizer.step()
+            if optim == 'SGD':
+                D_loss.backward()
+                d_optimizer.step()
+                gd = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in D.parameters()]), p=2)
+                gg = torch.norm(
+                    torch.cat([p.grad.contiguous().view(-1) for p in G.parameters()]), p=2)
+            else:
+                d_optimizer.step(D_loss)
+                cgdInfo = d_optimizer.get_info()
+                gd = cgdInfo['grad_y']
+                gg = cgdInfo['grad_x']
             tol_correct += (d_real > 0).sum().item() + (d_fake < 0).sum().item()
-
-            gd = torch.norm(
-                torch.cat([p.grad.contiguous().view(-1) for p in D.parameters()]), p=2)
-            gg = torch.norm(
-                torch.cat([p.grad.contiguous().view(-1) for p in G.parameters()]), p=2)
-
             writer.add_scalars('Loss', {'D_loss': D_loss.item(),
                                         'G_loss': G_loss.item()}, global_step=count)
             writer.add_scalars('Grad', {'D grad': gd.item(),
@@ -200,14 +210,14 @@ if __name__ == '__main__':
     #         model_weight=chk_path, load_d=True, load_g=True,
     #         compare_path=chk_path, info_time=100, run_select='figs/select/Fixed_1000.pt',
     #         device=device)
-    # train_d(epoch_num=30, show_iter=500,
-    #         logdir='sgd', loss_name='JSD',
-    #         model_weight=chk_path, load_d=True, load_g=True,
-    #         compare_path=None, info_time=100,
-    #         device=device)
-
-    fixG_path = 'checkpoints/sgd/FixG-0.010_14000.pth'
-    train_g(epoch_num=30, show_iter=500,
-            logdir='sgd_new', loss_name='JSD',
-            model_weight=fixG_path, load_d=True, load_g=True,
+    train_d(epoch_num=30, show_iter=500, optim='BCGD2',
+            logdir='sgd', loss_name='JSD',
+            model_weight=chk_path, load_d=True, load_g=True,
+            compare_path=None, info_time=100,
             device=device)
+
+    # fixG_path = 'checkpoints/sgd/FixG-0.010_14000.pth'
+    # train_g(epoch_num=30, show_iter=500,
+    #         logdir='sgd_new', loss_name='JSD',
+    #         model_weight=fixG_path, load_d=True, load_g=True,
+    #         device=device)
