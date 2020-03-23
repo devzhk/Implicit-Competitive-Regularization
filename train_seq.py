@@ -28,7 +28,7 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
             model_weight=None, load_d=False, load_g=False,
             compare_path=None, info_time=100, run_select=None,
             device='cpu'):
-    lr_d = 0.01
+    lr_d = 0.001
     lr_g = 0.01
     batchsize = 128
     z_dim = 96
@@ -67,10 +67,12 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
     writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
     if optim == 'SGD':
         d_optimizer = SGD(D.parameters(), lr=lr_d)
+        print('Optimizer SGD')
     else:
         d_optimizer = BCGD2(max_params=G.parameters(), min_params=D.parameters(),
                             lr_max=lr_g, lr_min=lr_d, update_max=False,
                             device=device, collect_info=True)
+        print('Optimizer BCGD2')
     timer = time.time()
     count = 0
     d_losses = []
@@ -118,11 +120,12 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
                 cgdInfo = d_optimizer.get_info()
                 gd = cgdInfo['grad_y']
                 gg = cgdInfo['grad_x']
+                writer.add_scalars('Grad', {'update': cgdInfo['update']}, global_step=count)
             tol_correct += (d_real > 0).sum().item() + (d_fake < 0).sum().item()
             writer.add_scalars('Loss', {'D_loss': D_loss.item(),
                                         'G_loss': G_loss.item()}, global_step=count)
-            writer.add_scalars('Grad', {'D grad': gd.item(),
-                                        'G grad': gg.item()}, global_step=count)
+            writer.add_scalars('Grad', {'D grad': gd,
+                                        'G grad': gg}, global_step=count)
             writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
                                                         'Real image': d_real.mean().item()},
                                global_step=count)
@@ -210,7 +213,7 @@ if __name__ == '__main__':
     #         model_weight=chk_path, load_d=True, load_g=True,
     #         compare_path=chk_path, info_time=100, run_select='figs/select/Fixed_1000.pt',
     #         device=device)
-    train_d(epoch_num=30, show_iter=500, optim='BCGD2',
+    train_d(epoch_num=2, show_iter=500, optim='BCGD2',
             logdir='sgd', loss_name='JSD',
             model_weight=chk_path, load_d=True, load_g=True,
             compare_path=None, info_time=100,

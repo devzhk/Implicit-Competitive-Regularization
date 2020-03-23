@@ -7,7 +7,7 @@ from .cgd_utils import conjugate_gradient, Hvp_vec, zero_grad
 
 class ICR(object):
     def __init__(self, max_params, min_params,
-                 lr=1e-3, momentum=0, alpha=2.0,
+                 lr=1e-3, momentum=0, alpha=1.0,
                  device=torch.device('cpu'), collect_info=True):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
@@ -69,14 +69,15 @@ class ICR(object):
                                               b=p_x, x=self.state['old_max'],
                                               nsteps=p_x.shape[0], lr_x=lr, lr_y=alpha * lr,
                                               device=self.device)
+        cg_x.detach_()
         cg_y, y_iter_num = conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
                                               x_params=self.min_params, y_params=self.max_params,
                                               b=p_y, x=self.state['old_min'],
                                               nsteps=p_y.shape[0], lr_x=lr, lr_y=alpha * lr,
                                               device=self.device)
-        iter_num = x_iter_num + y_iter_num
-        cg_x.detach_()
         cg_y.detach_()
+        iter_num = x_iter_num + y_iter_num
+
         self.state.update({'old_max': cg_x, 'old_min': cg_y})
 
         index = 0

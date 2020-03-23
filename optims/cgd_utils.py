@@ -6,8 +6,9 @@ import warnings
 def conjugate_gradient(grad_x, grad_y,
                        x_params, y_params,
                        b, x=None, nsteps=10,
-                       tol=1e-12, atol=1e-20,
-                       lr_x=1.0, lr_y=1.0, device=torch.device('cpu')):
+                       tol=1e-20, atol=1e-32,
+                       lr_x=1.0, lr_y=1.0,
+                       device=torch.device('cpu')):
     """
     :param grad_x:
     :param grad_y:
@@ -28,11 +29,14 @@ def conjugate_gradient(grad_x, grad_y,
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
     residual_tol = tol * rdotr
+    pArray = []
+    pArray.append(p)
     for i in range(nsteps):
         # To compute Avp
-        h_1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=p, retain_graph=True)
-        h_2 = Hvp_vec(grad_vec=grad_y, params=x_params, vec=h_1, retain_graph=True)
-        Avp_ = p + lr_y * lr_x * h_2
+        h_1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=p, retain_graph=True).detach_().mul(lr_y)
+        h_2 = Hvp_vec(grad_vec=grad_y, params=x_params, vec=h_1, retain_graph=True).detach_().mul(lr_x)
+        Avp_ = p + h_2
+        pArray.append(Avp_)
 
         alpha = rdotr / torch.dot(p, Avp_)
         x.data.add_(alpha * p)
@@ -45,7 +49,7 @@ def conjugate_gradient(grad_x, grad_y,
             break
     if i > 99:
         warnings.warn('CG iter num: %d' % (i + 1))
-    return x, i + 1
+    return x, i + 1, pArray
 
 
 def Hvp(grad_vec, params, vec, retain_graph=False):

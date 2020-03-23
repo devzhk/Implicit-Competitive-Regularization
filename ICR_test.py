@@ -50,7 +50,7 @@ class TestICR(unittest.TestCase):
     def setUp(self):
         self.D_1 = NetD().to(device)
         self.G_1 = NetG().to(device)
-        print_weight(D=self.D_1, G=self.G_1)
+
         z = torch.tensor([2.0], device=device)
         loss1 = self.D_1(self.G_1(z))
         bcgd = BCGD(max_params=self.G_1.parameters(), min_params=self.D_1.parameters(),
@@ -87,4 +87,12 @@ class TestICR(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    # unittest.main()
+    factor = 0.01
+    A_g = torch.tensor([[1.0 + 4.0 * factor, 0.0, 2.0 * factor, 0],
+                        [0.0, 1.0 + 4.0 * factor, 0.0, 2.0 * factor],
+                        [2.0 * factor, 0.0, 1.0 + factor, 0.0],
+                        [0.0, 2.0 * factor, 0.0, 1.0 + factor]])
+    A_d = torch.tensor([[1.0 + 5.0 * factor, 0.0, 0.0],
+                        [0.0, 1.0 + 5.0 * factor, 0.0],
+                        [0.0, 0.0, 1.0]])

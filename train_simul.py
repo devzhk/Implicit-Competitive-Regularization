@@ -18,6 +18,8 @@ from train_utils import get_data, weights_init_d, weights_init_g, \
     get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler
 from losses import get_loss
 
+import numpy as np
+
 
 def train_mnist(epoch_num=10, show_iter=100, logdir='test',
                 model_weight=None, load_d=False, load_g=False,
