@@ -4,8 +4,8 @@ import unittest
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
-from optims import ICR, BCGD, testBCGD, LCGD
-from optims.testOptim import testLCGD
+from optims import BCGD, LCGD
+from optims.testOptim import testLCGD, ICR, testBCGD
 from tensorboardX import SummaryWriter
 
 device = torch.device('cuda:0') if torch.cuda.is_available() else 'cpu'
@@ -74,14 +74,14 @@ def train():
 
 
 if __name__ == '__main__':
-    optim_type = 'ICR'
+    optim_type = 'testBCGD'
     lr = 0.1
-    epoch_num = 100
+    epoch_num = 50
     # device = torch.device('cuda:0') if torch.cuda.is_available() else 'cpu'
     device = 'cpu'
     D = NetD().to(device)
     G = NetG().to(device)
-    writer = SummaryWriter(log_dir='logs/test4/%s-r' % optim_type)
+    writer = SummaryWriter(log_dir='logs/test6/%s-real' % optim_type)
     if optim_type == 'ICR':
         optimizer = ICR(max_params=G.parameters(), min_params=D.parameters(),
                         lr=lr, alpha=1.0, device=device)
@@ -103,6 +103,9 @@ if __name__ == '__main__':
         loss = D(G(z)) - D(real_x)
         optimizer.zero_grad()
         optimizer.step(loss)
+        # if e == 1:
+        #     torch.save({'D': D.state_dict(),
+        #                 'G': G.state_dict()}, 'net.pth')
         writer.add_scalar('Generator/Weight0', G.net.weight.data[0].item(), global_step=e)
         writer.add_scalar('Generator/Weight1', G.net.weight.data[1].item(), global_step=e)
         writer.add_scalar('Generator/Bias0', G.net.bias.data[0].item(), global_step=e)
