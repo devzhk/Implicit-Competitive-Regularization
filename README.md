@@ -5,14 +5,13 @@ This code contains experiments for paper: 'Implicit competitive regularization i
 Quick demo for experiments : `train.ipynb`
 Repro code for paper: `VisionData.py`, `wgan_gp.py`
 
-**We found some numerical issues regarding to double backprop in Pytorch. We are working to fix it.**
 ## How to use new optimizer(ACGD) in our paper
 Copy `optimizers.py` and `cgd_utils.py` to your directory. 
 **It's important to force cudnn to benchmark and pick the best algo.**
 ```python
 import torch
 torch.backends.cudnn.benchmark = True
-from optimizers import ACGD
+from optims import ACGD
 device = torch.device('cuda:0')
 lr = 0.0001
 G = Generator()
