@@ -6,7 +6,7 @@ Quick demo for experiments : `train.ipynb`
 Repro code for paper: `VisionData.py`, `wgan_gp.py`
 
 ## How to use new optimizer(ACGD) in our paper
-Copy `optimizers.py` and `cgd_utils.py` to your directory. 
+Package 'optims' contains the original Compeititive Gradient Descent (BCGD), and the adaptive Competitive Gradient Descent (ACGD). 
 **It's important to force cudnn to benchmark and pick the best algo.**
 ```python
 import torch
