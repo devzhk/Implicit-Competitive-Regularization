@@ -17,6 +17,7 @@ lr = 0.0001
 G = Generator()
 D = Discriminator()
 optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(), lr_max=lr, lr_min=lr, device=device)
+# max_parems is maximizing the objective function while the min_params is trying to minimizing it. 
 # BCGD(max_params=G.parameters(), min_params=D.parameters(), lr_max=lr, lr_min=lr, device=device)
 # ACGD: Adaptive learning rates CGD;
 for img in dataloader:
