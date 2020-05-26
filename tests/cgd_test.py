@@ -74,7 +74,7 @@ def train():
 
 
 if __name__ == '__main__':
-    optim_type = 'testBCGD'
+    optim_type = 'BCGD'
     lr = 0.1
     epoch_num = 50
     # device = torch.device('cuda:0') if torch.cuda.is_available() else 'cpu'

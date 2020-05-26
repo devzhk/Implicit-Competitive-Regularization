@@ -6,7 +6,7 @@ import warnings
 def conjugate_gradient(grad_x, grad_y,
                        x_params, y_params,
                        b, x=None, nsteps=10,
-                       tol=1e-12, atol=1e-20,
+                       tol=1e-10, atol=1e-16,
                        lr_x=1.0, lr_y=1.0,
                        device=torch.device('cpu')):
     """
@@ -57,12 +57,6 @@ def conjugate_gradient(grad_x, grad_y,
     return x, i + 1
 
 
-def Hvp(grad_vec, params, vec, retain_graph=False):
-    grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph)
-    # hvp = torch.cat([g.contiguous().view(-1) for g in grad_grad])
-    return grad_grad
-
-
 def Hvp_vec(grad_vec, params, vec, retain_graph=False):
     '''
     return Hessian vector product
@@ -77,7 +71,7 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
     grad_list = []
     for i, p in enumerate(params):
         if grad_grad[i] is None:
-            grad_list.append(torch.zeros_like(p))
+            grad_list.append(torch.zeros_like(p).view(-1))
         else:
             grad_list.append(grad_grad[i].contiguous().view(-1))
     hvp = torch.cat(grad_list)
@@ -107,14 +101,21 @@ def general_conjugate_gradient(grad_x, grad_y,
     :return: (I + sqrt(lr_x) * D_xy * lr_y * D_yx * sqrt(lr_x)) ** -1 * b
 
     '''
+    lr_x = lr_x.sqrt()
     if x is None:
         x = torch.zeros(b.shape[0], device=device)
+        r = b.clone().detach()
+    else:
+        h1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=lr_x * x, retain_graph=True).mul_(lr_y)
+        h2 = Hvp_vec(grad_vec=grad_y, params=x_params, vec=h1, retain_graph=True).mul_(lr_x)
+        Avx = x + h2
+        r = b.clone().detach() - Avx
+
     if nsteps is None:
         nsteps = b.shape[0]
+
     if grad_x.shape != b.shape:
         raise RuntimeError('CG: hessian vector product shape mismatch')
-    lr_x = lr_x.sqrt()
-    r = b.clone().detach()
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
     residual_tol = tol * rdotr

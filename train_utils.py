@@ -6,12 +6,24 @@ import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, LSUN
-from GANs.models import dc_D, dc_G, GoodDiscriminator, GoodGenerator, GoodDiscriminatord
+from GANs import dc_G, dc_D, \
+    GoodGenerator, GoodDiscriminator, GoodDiscriminatorbn, GoodDiscriminatord, \
+    DC_generator, DC_discriminator, \
+    ResNet32Discriminator, ResNet32Generator, DC_discriminatorW, GoodSNDiscriminator
 
 
 mnist_tf = transforms.Compose([transforms.ToTensor(),
                                transforms.Normalize((0.5,), (0.5,))
                                ])
+
+
+def generate_image(model_weight,path, z_dim,
+                   num=1, device='cpu'):
+    chk = torch.load(model_weight)
+    G = GoodGenerator()
+    G.load_state_dict(chk['G'])
+
+
 
 
 def generate_data(model_weight, path, z_dim=96, device='cpu'):
@@ -76,14 +88,34 @@ def get_diff(net, model_vec):
     return vom
 
 
-def get_model(config):
-    model = config['model']
-    if model == 'mnist_GAN':
-        D = dc_D()
-        G = dc_G(z_dim=config['z_dim'])
-    elif model == 'cifar-DCGAN':
-        D = GoodDiscriminatord() if config['dropout'] else GoodDiscriminator()
+def get_model(model_name, z_dim):
+    if model_name == 'dc':
+        D = GoodDiscriminator()
         G = GoodGenerator()
+    elif model_name == 'dcBN':
+        D = GoodDiscriminatorbn()
+        G = GoodGenerator()
+    elif model_name == 'dcD':
+        D = GoodDiscriminatord()
+        G = GoodGenerator()
+    elif model_name == 'DCGAN':
+        D = DC_discriminator()
+        G = DC_generator(z_dim=z_dim)
+    elif model_name == 'Resnet':
+        D = ResNet32Discriminator(n_in=3, num_filters=128, batchnorm=True)
+        G = ResNet32Generator(z_dim=z_dim, num_filters=128, batchnorm=True)
+    elif model_name == 'ResnetWBN':
+        D = ResNet32Discriminator(n_in=3, num_filters=128, batchnorm=False)
+        G = ResNet32Generator(z_dim=z_dim, num_filters=128, batchnorm=True)
+    elif model_name == 'DCGAN-WBN':
+        D = DC_discriminatorW()
+        G = DC_generator(z_dim=z_dim)
+    elif model_name == 'dcSN':
+        D = GoodSNDiscriminator()
+        G = GoodGenerator()
+    else:
+        print('No matching result of :')
+    print(model_name)
     return D, G
 
 
@@ -121,7 +153,7 @@ def get_data(dataname, path, img_size=64):
     return dataset
 
 
-def save_checkpoint(path, name, D, G, optimizer=None):
+def save_checkpoint(path, name, D, G, optimizer=None, g_optimizer=None):
     chk_name = 'checkpoints/%s/' % path
     if not os.path.exists(chk_name):
         os.makedirs(chk_name)
@@ -135,11 +167,20 @@ def save_checkpoint(path, name, D, G, optimizer=None):
         optim_dict = optimizer.state_dict()
     else:
         optim_dict = 0
-    torch.save({
-        'D': d_state_dict,
-        'G': g_state_dict,
-        'optim': optim_dict
-    }, chk_name + name)
+    if g_optimizer is not None:
+        g_optim_dict = g_optimizer.state_dict()
+        torch.save({
+            'D': d_state_dict,
+            'G': g_state_dict,
+            'd_optim': optim_dict,
+            'g_optim': g_optim_dict,
+        }, chk_name + name)
+    else:
+        torch.save({
+            'D': d_state_dict,
+            'G': g_state_dict,
+            'optim': optim_dict
+        }, chk_name + name)
     print('model is saved at %s' % chk_name + name)
 
 

@@ -1,3 +1,4 @@
+import os
 import csv
 import time
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ from torch.utils.data import DataLoader
 from GANs import dc_G, dc_D
 from optims import BCGD2
 from utils import train_seq_parser
-from train_utils import get_data, save_checkpoint, detransform, \
+from train_utils import get_data, save_checkpoint, get_model, \
     weights_init_d, weights_init_g, get_diff
 from losses import get_loss
 
@@ -32,7 +33,7 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
     lr_g = 0.01
     batchsize = 128
     z_dim = 96
-    print('MNIST, discriminator lr: %.3f' % lr_d)
+    print('discriminator lr: %.3f' % lr_d)
     dataset = get_data(dataname='MNIST', path='../datas/mnist')
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
@@ -202,6 +203,90 @@ def train_g(epoch_num=10, logdir='test',
                                 D=D, G=G)
             count += 1
         writer.close()
+
+
+def train(epoch_num=10, milestone=None, optim_type='ACGD',
+          startPoint=None, start_n=0,
+          z_dim=128, batchsize=64,
+          loss_name='WGAN', model_name='dc', data_path='None',
+          show_iter=100, logdir='test', dataname='cifar10',
+          device='cpu', gpu_num=1, collect_info=False):
+    dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
+    dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
+                            num_workers=4)
+    D, G = get_model(model_name=model_name, z_dim=z_dim)
+    D.apply(weights_init_d).to(device)
+    G.apply(weights_init_g).to(device)
+    from datetime import datetime
+    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
+    writer = SummaryWriter(log_dir='logs/%s/%s' % (logdir, current_time))
+    d_optimizer = Adam(D.paremeters(), betas=(0.0, 0.999))
+    g_optimizer = Adam(G.paremeters(), betas=(0.0, 0.999))
+    if startPoint is not None:
+        chk = torch.load(startPoint)
+        D.load_state_dict(chk['D'])
+        G.load_state_dict(chk['G'])
+        d_optimizer.load_state_dict(chk['d_optim'])
+        g_optimizer.load_state_dict(chk['g_optim'])
+        print('Start from %s' % startPoint)
+    if gpu_num > 1:
+        D = nn.DataParallel(D, list(range(gpu_num)))
+        G = nn.DataParallel(G, list(range(gpu_num)))
+    timer = time.time()
+    count = 0
+    if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+        fixed_noise = torch.randn((64, z_dim, 1, 1), device=device)
+    else:
+        fixed_noise = torch.randn((64, z_dim), device=device)
+
+    for e in range(epoch_num):
+        print('======Epoch: %d / %d======' % (e, epoch_num))
+        for real_x in dataloader:
+            real_x = real_x[0].to(device)
+            d_real = D(real_x)
+            if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+                z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
+            else:
+                z = torch.randn((d_real.shape[0], z_dim), device=device)
+            fake_x = G(z)
+            d_fake = D(fake_x)
+            d_loss = get_loss(name=loss_name, g_loss=False, d_real=d_real, d_fake=d_fake)
+            d_optimizer.zero_grad()
+            d_loss.backward()
+            d_optimizer.step()
+
+            if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+                z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
+            else:
+                z = torch.randn((d_real.shape[0], z_dim), device=device)
+            fake_x = G(z)
+            d_fake = D(fake_x)
+            g_loss = get_loss(name=loss_name, g_loss=True, d_fake=d_fake)
+            g_optimizer.zero_grad()
+            g_loss.backward()
+            g_optimizer.step()
+
+            writer.add_scalar('Loss/D loss', d_loss.item(), count)
+            writer.add_scalar('Loss/G loss', g_loss.item(), count)
+            writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
+                                                        'Real image': d_real.mean().item()},
+                               global_step=count)
+            if count % show_iter == 0:
+                time_cost = time.time() - timer
+                print('Iter %d, D Loss: %.5f, G loss: %.5f, time: %.2f s'
+                      % (count, d_loss.item(), g_loss.item(), time_cost))
+                timer = time.time()
+                with torch.no_grad():
+                    fake_img = G(fixed_noise).detach()
+                    path = 'figs/%s_%s/' % (dataname, logdir)
+                    if not os.path.exists(path):
+                        os.makedirs(path)
+                    vutils.save_image(fake_img, path + 'iter_%d.png' % (count + start_n), normalize=True)
+                save_checkpoint(path=logdir,
+                                name='%s-%s_%d.pth' % (optim_type, model_name, count + start_n),
+                                D=D, G=G, optimizer=d_optimizer, g_optimizer=g_optimizer)
+    writer.close()
+
 
 
 if __name__ == '__main__':

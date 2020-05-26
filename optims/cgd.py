@@ -9,12 +9,14 @@ from .cgd_utils import conjugate_gradient, Hvp_vec, zero_grad
 class BCGD(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
+                 tol=1e-12, atol=1e-20,
                  momentum=0.0, device=torch.device('cpu'),
                  solve_x=False, collect_info=True):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
                       'momentum': momentum, 'solve_x': solve_x,
+                      'tol': tol, 'atol': atol,
                       'step': 0, 'old_max': None, 'old_min': None,  # start point of CG
                       'exp_avg_max': 0.0, 'exp_avg_min': 0.0}  # save last update
         self.info = {'grad_x': None, 'grad_y': None,
@@ -83,6 +85,8 @@ class BCGD(object):
         """
         lr_max = self.state['lr_max']
         lr_min = self.state['lr_min']
+        tol = self.state['tol']
+        atol = self.state['atol']
         time_step = self.state['step'] + 1
         self.state['step'] = time_step
 
@@ -110,6 +114,7 @@ class BCGD(object):
                                                 y_params=self.max_params, b=p_y, x=self.state['old_min'],
                                                 nsteps=p_y.shape[0],
                                                 lr_x=lr_max, lr_y=lr_min,
+                                                tol=tol, atol=atol,
                                                 device=self.device)
             hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y.detach_()).detach_()
             cg_x = torch.add(grad_x_vec_d, - lr_min * hcg)
@@ -118,7 +123,9 @@ class BCGD(object):
                                                 x_params=self.max_params,
                                                 y_params=self.min_params, b=p_x, x=self.state['old_max'],
                                                 nsteps=p_x.shape[0],
-                                                lr_x=lr_max, lr_y=lr_min, device=self.device)
+                                                lr_x=lr_max, lr_y=lr_min,
+                                                tol=tol, atol=atol,
+                                                device=self.device)
             hcg = Hvp_vec(grad_x_vec, self.min_params, cg_x.detach_()).detach_()
             cg_y = torch.add(grad_y_vec_d, lr_max * hcg)
         self.state.update({'old_max': cg_x, 'old_min': cg_y})
@@ -228,12 +235,14 @@ class BCGD(object):
 class BCGD2(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3, device=torch.device('cpu'),
+                 tol=1e-12, atol=1e-20,
                  update_max=False, collect_info=True):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.device = device
         self.collect_info = collect_info
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
+                      'tol': tol, 'atol': atol,
                       'update_max': update_max, 'old': None}
         self.info = {'grad_x': None, 'grad_y': None,
                      'update': None, 'iter_num': 0}
@@ -262,6 +271,8 @@ class BCGD2(object):
     def step(self, loss):
         lr_max = self.state['lr_max']
         lr_min = self.state['lr_min']
+        tol = self.state['tol']
+        atol = self.state['atol']
         grad_x = autograd.grad(loss, self.max_params, create_graph=True, retain_graph=True)
         grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
         grad_y = autograd.grad(loss, self.min_params, create_graph=True, retain_graph=True)
@@ -277,7 +288,9 @@ class BCGD2(object):
                                               x_params=self.max_params,
                                               y_params=self.min_params, b=p_x, x=self.state['old'],
                                               nsteps=p_x.shape[0],
-                                              lr_x=lr_max, lr_y=lr_min, device=self.device)
+                                              lr_x=lr_max, lr_y=lr_min,
+                                              tol=tol, atol=atol,
+                                              device=self.device)
             cg.detach_()
             index = 0
             for p in self.max_params:
@@ -294,6 +307,7 @@ class BCGD2(object):
                                               y_params=self.max_params, b=p_y, x=self.state['old'],
                                               nsteps=p_y.shape[0],
                                               lr_x=lr_max, lr_y=lr_min,
+                                              tol=tol, atol=atol,
                                               device=self.device)
             cg.detach_()
             index = 0

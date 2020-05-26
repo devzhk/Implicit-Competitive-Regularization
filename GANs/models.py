@@ -37,19 +37,19 @@ class GoodDiscriminator(nn.Module):
         super(GoodDiscriminator, self).__init__()
         self.main_module = nn.Sequential(
             nn.Conv2d(3, DIM, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(DIM),
+            # nn.BatchNorm2d(DIM),
             nn.LeakyReLU(),
             # nn.Softplus(),
             # nn.Dropout2d(),
             # 16x16
             nn.Conv2d(DIM, 2 * DIM, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(2 * DIM),
+            # nn.BatchNorm2d(2 * DIM),
             nn.LeakyReLU(),
             # nn.Softplus(),
             # nn.Dropout2d(),
             # 8x8
             nn.Conv2d(2 * DIM, 4 * DIM, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(4 * DIM),
+            # nn.BatchNorm2d(4 * DIM),
             nn.LeakyReLU(),
             # nn.Softplus(),
             # nn.Dropout2d(),
@@ -81,6 +81,40 @@ class GoodDiscriminatord(nn.Module):
             nn.Conv2d(2 * DIM, 4 * DIM, kernel_size=4, stride=2, padding=1),
             nn.LeakyReLU(),
             nn.Dropout2d(dropout),
+            # 4 x 4
+        )
+        self.linear = nn.Linear(4 * 4 * 4 * DIM, 1)
+
+    def forward(self, input):
+        output = self.main_module(input)
+        output = output.view(-1, 4 * 4 * 4 * DIM)
+        # print(output.shape)
+        output = self.linear(output)
+        # print(output.shape)
+        return output
+
+
+class GoodDiscriminatorbn(nn.Module):
+    def __init__(self):
+        super(GoodDiscriminatorbn, self).__init__()
+        self.main_module = nn.Sequential(
+            nn.Conv2d(3, DIM, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(DIM),
+            nn.LeakyReLU(),
+            # nn.Softplus(),
+            # nn.Dropout2d(),
+            # 16x16
+            nn.Conv2d(DIM, 2 * DIM, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(2 * DIM),
+            nn.LeakyReLU(),
+            # nn.Softplus(),
+            # nn.Dropout2d(),
+            # 8x8
+            nn.Conv2d(2 * DIM, 4 * DIM, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(4 * DIM),
+            nn.LeakyReLU(),
+            # nn.Softplus(),
+            # nn.Dropout2d(),
             # 4 x 4
         )
         self.linear = nn.Linear(4 * 4 * 4 * DIM, 1)
@@ -247,6 +281,36 @@ class DC_discriminator(nn.Module):
             nn.Conv2d(feature_num * 4, feature_num * 8, kernel_size=4, stride=2, padding=1,
                       bias=False),
             nn.BatchNorm2d(feature_num * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (feature_num * 8) * 4x4
+            nn.Conv2d(feature_num * 8, 1, kernel_size=4, stride=1, padding=0, bias=False),
+            # feature_num * 16x16
+        )
+
+    def forward(self, input):
+        return self.main_module(input)
+
+
+class DC_discriminatorW(nn.Module):
+    def __init__(self, channel_num=3, feature_num=64):
+        super(DC_discriminatorW, self).__init__()
+        self.main_module = nn.Sequential(
+            # channel_num * 64x64
+            nn.Conv2d(channel_num, feature_num, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (feature_num) * 32x32
+            nn.Conv2d(feature_num, feature_num * 2, kernel_size=4, stride=2, padding=1, bias=False),
+            # nn.BatchNorm2d(feature_num * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (feature_num * 2) * 16x16
+            nn.Conv2d(feature_num * 2, feature_num * 4, kernel_size=4, stride=2, padding=1,
+                      bias=False),
+            # nn.BatchNorm2d(feature_num * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (feature_num * 4) * 8x8
+            nn.Conv2d(feature_num * 4, feature_num * 8, kernel_size=4, stride=2, padding=1,
+                      bias=False),
+            # nn.BatchNorm2d(feature_num * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # (feature_num * 8) * 4x4
             nn.Conv2d(feature_num * 8, 1, kernel_size=4, stride=1, padding=0, bias=False),

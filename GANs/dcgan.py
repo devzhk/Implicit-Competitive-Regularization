@@ -3,9 +3,8 @@ import torch.nn as nn
 
 
 class DCGAN_D(nn.Module):
-    def __init__(self, isize, nz, nc, ndf, ngpu, n_extra_layers=0):
+    def __init__(self, isize, nz, nc, ndf, n_extra_layers=0):
         super(DCGAN_D, self).__init__()
-        self.ngpu = ngpu
         assert isize % 16 == 0, "isize has to be a multiple of 16"
 
         main = nn.Sequential()
@@ -43,11 +42,7 @@ class DCGAN_D(nn.Module):
         self.main = main
 
     def forward(self, input):
-        if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
-            output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
-        else:
-            output = self.main(input)
-
+        output = self.main(input)
         output = output.mean(0)
         return output.view(1)
 
@@ -99,8 +94,5 @@ class DCGAN_G(nn.Module):
         self.main = main
 
     def forward(self, input):
-        if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
-            output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
-        else:
-            output = self.main(input)
+        output = self.main(input)
         return output

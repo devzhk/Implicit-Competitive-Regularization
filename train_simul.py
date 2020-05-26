@@ -1,6 +1,7 @@
 import os
 import csv
 import time
+import math
 
 import torch
 import torch.nn as nn
@@ -10,15 +11,16 @@ from torch.optim.sgd import SGD
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
-from GANs import dc_G, dc_D, \
-    GoodGenerator, GoodDiscriminator, \
-    DC_generator, DC_discriminator
+from GANs import dc_G, dc_D
 from optims import ACGD, BCGD, ICR
 from train_utils import get_data, weights_init_d, weights_init_g, \
-    get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler
+    get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler, get_model
 from losses import get_loss
 
-import numpy as np
+# seed = torch.randint(0, 1000000, (1,))
+seed = 1
+torch.manual_seed(seed=seed)
+print('random seed : %d' % seed)
 
 
 def train_mnist(epoch_num=10, show_iter=100, logdir='test',
@@ -136,55 +138,65 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
 
 
 def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
+              startPoint=None, start_n=0,
+              z_dim=128, batchsize=64,
+              tols={'tol':1e-12, 'atol':1e-20},
               loss_name='WGAN', model_name='dc', data_path='None',
               show_iter=100, logdir='test', dataname='cifar10',
               device='cpu', gpu_num=1, collect_info=False):
-    lr_d = 0.001
-    lr_g = 0.001
-    batchsize = 64
-    z_dim = 128
+    lr_d = 0.01
+    lr_g = 0.01
+
     dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
-    if model_name == 'dc':
-        D = GoodDiscriminator().to(device)
-        G = GoodGenerator().to(device)
-    elif model_name == 'DCGAN':
-        D = DC_discriminator().to(device)
-        G = DC_generator(z_dim=z_dim).to(device)
-    if gpu_num > 1:
-        D = nn.DataParallel(D, list(range(gpu_num)))
-        G = nn.DataParallel(G, list(range(gpu_num)))
-    D.apply(weights_init_d)
-    G.apply(weights_init_g)
+    D, G = get_model(model_name=model_name, z_dim=z_dim)
+    D.apply(weights_init_d).to(device)
+    G.apply(weights_init_g).to(device)
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
     if optim_type == 'BCGD':
         optimizer = BCGD(max_params=G.parameters(), min_params=D.parameters(),
-                         lr_max=lr_g, lr_min=lr_d, device=device)
+                         lr_max=lr_g, lr_min=lr_d,
+                         tol=tols['tol'], atol=tols['atol'],
+                         device=device)
         scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
-    else:
+    elif optim_type == 'ICR':
         optimizer = ICR(max_params=G.parameters(), min_params=D.parameters(),
                         lr=lr_d, alpha=1.0, device=device)
         scheduler = icrScheduler(optimizer, milestone)
-
+    elif optim_type == 'ACGD':
+        optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(),
+                         lr_max=lr_g, lr_min=lr_d,
+                         tol=tols['tol'], atol=tols['atol'],
+                         device=device)
+        scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
+    if startPoint is not None:
+        chk = torch.load(startPoint)
+        D.load_state_dict(chk['D'])
+        G.load_state_dict(chk['G'])
+        optimizer.load_state_dict(chk['optim'])
+        print('Start from %s' % startPoint)
+    if gpu_num > 1:
+        D = nn.DataParallel(D, list(range(gpu_num)))
+        G = nn.DataParallel(G, list(range(gpu_num)))
     timer = time.time()
     count = 0
-    if model_name == 'dc':
-        fixed_noise = torch.randn((64, z_dim), device=device)
-    else:
+    if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
         fixed_noise = torch.randn((64, z_dim, 1, 1), device=device)
+    else:
+        fixed_noise = torch.randn((64, z_dim), device=device)
     for e in range(epoch_num):
         scheduler.step(epoch=e)
         print('======Epoch: %d / %d======' % (e, epoch_num))
         for real_x in dataloader:
             real_x = real_x[0].to(device)
             d_real = D(real_x)
-            if model_name == 'dc':
-                z = torch.randn((d_real.shape[0], z_dim), device=device)
-            else:
+            if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
                 z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
+            else:
+                z = torch.randn((d_real.shape[0], z_dim), device=device)
             fake_x = G(z)
             d_fake = D(fake_x)
             loss = get_loss(name=loss_name, g_loss=False, d_real=d_real, d_fake=d_fake)
@@ -201,10 +213,10 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
                     path = 'figs/%s_%s/' % (dataname, logdir)
                     if not os.path.exists(path):
                         os.makedirs(path)
-                    vutils.save_image(fake_img, path + 'iter_%d.png' % count, normalize=True)
+                    vutils.save_image(fake_img, path + 'iter_%d.png' % (count + start_n), normalize=True)
                 save_checkpoint(path=logdir,
-                                name='CGD-%.3f%.3f_%d.pth' % (lr_d, lr_g, count),
-                                D=D, G=G)
+                                name='%s-%s%.3f_%d.pth' % (optim_type, model_name, lr_g, count + start_n),
+                                D=D, G=G, optimizer=optimizer)
             writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
                                                         'Real image': d_real.mean().item()},
                                global_step=count)
@@ -234,16 +246,26 @@ if __name__ == '__main__':
     #             model_weight=chk_path, load_d=True, load_g=True,
     #             compare_path=chk_path, info_time=100, run_select='figs/select/Fixed_1000.pt',
     #             device=device)
-
+    start_n = 0
+    # chk_path = 'checkpoints/ACGD/ACGD-Resnet0.010_%d.pth' % start_n
+    # chk_path = 'checkpoints/ACGD/ACGD-dc0.010_%d.pth' % start_n
+    # test 132000 64, ACGD 45000 128
+    # chk_path = 'checkpoints/ACGD/ACGD-DCGAN0.010_%d.pth' % start_n
+    chk_path = None
     # train_cgd(epoch_num=40, milestone=(25, 30, 35), show_iter=500, logdir='cifar',
     #           dataname='CIFAR10', loss_name='WGAN', model_name='dc',
     #           device=device, gpu_num=2, collect_info=True)
-    milestones = {'0': (0.01, 0.01),
-                  '5': (0.001, 0.001),
-                  '10': (0.001, 0.001)}
-    train_cgd(epoch_num=15, milestone=milestones,
-              optim_type='BCGD',
-              show_iter=100, logdir='ICRtest',
+    factor = 1
+    # lr = 0.0001 * math.sqrt(factor)
+    lr = 0.01
+    print(lr)
+    milestones = {'0': (lr, lr)}
+    tols = {'tol': 1e-10, 'atol': 1e-16}
+    print(tols)
+    train_cgd(epoch_num=600, milestone=milestones,
+              optim_type='BCGD', startPoint=chk_path, start_n=start_n,
+              show_iter=5000, logdir='ACGD64',
+              z_dim=128, batchsize=64 * factor,
               data_path='cifar10', dataname='CIFAR10',
-              loss_name='WGAN', model_name='dc',
+              loss_name='WGAN', model_name='dc', tols=tols,
               device=device, gpu_num=2, collect_info=True)

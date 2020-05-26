@@ -12,13 +12,14 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
-from GANs.models import dc_D, dc_G
+from GANs.models import dc_D, dc_G, GoodDiscriminator, GoodGenerator
 from optims.adam import Adam, RAdam
 from optims.cgd_utils import zero_grad, Hvp_vec, conjugate_gradient
+from train_utils import get_data
+
 
 seed = torch.randint(0, 1000000, (1,))
-# bad seeds: 850527
-# good seeds: 952132, 64843
+
 torch.manual_seed(seed=seed)
 print('random seed : %d' % seed)
 
@@ -231,8 +232,8 @@ class VisionData():
         g_param = torch.cat([p.contiguous().view(-1) for p in self.G.parameters()])
         wd = torch.norm(d_param, p=2)
         wg = torch.norm(g_param, p=2)
-        self.writer.add_histogram('Parameters/Discriminator', d_param, global_step=self.count)
-        self.writer.add_histogram('Parameters/Generator', g_param, global_step=self.count)
+        # self.writer.add_histogram('Parameters/Discriminator', d_param, global_step=self.count)
+        # self.writer.add_histogram('Parameters/Generator', g_param, global_step=self.count)
         self.writer.add_scalars('weight', {'D params': wd.item(), 'G params': wg.item()}, self.count)
 
     def plot_proj(self, epoch, loss, model_vec):
@@ -575,14 +576,17 @@ class VisionData():
                     self.plot_proj(epoch=self.count, model_vec=model_vec, loss=D_loss)
                 if compare_weight is not None and self.count % info_time == 0:
                     self.plot_diff(model_vec=model_vec)
+                self.plot_param(D_loss=D_loss, G_loss=G_loss)
                 d_optimizer.zero_grad()
                 zero_grad(self.G.parameters())
                 D_loss.backward()
-                flag = True if self.count % info_time == 0 else False
-                d_steps, d_updates = d_optimizer.step(info=flag)
-                if flag:
-                    self.plot_optim(d_steps=d_steps, d_updates=d_updates,
-                                    his=his_flag)
+                # flag = True if self.count % info_time == 0 else False
+                if e != 0:
+                    d_optimizer.step()
+                # d_steps, d_updates = d_optimizer.step(info=flag)
+                # if flag:
+                #     self.plot_optim(d_steps=d_steps, d_updates=d_updates,
+                #                     his=his_flag)
 
                 tol_correct += (d_real > 0).sum().item() + (d_fake < 0).sum().item()
 
@@ -590,7 +594,7 @@ class VisionData():
                     torch.cat([p.grad.contiguous().view(-1) for p in self.D.parameters()]), p=2)
                 gg = torch.norm(
                     torch.cat([p.grad.contiguous().view(-1) for p in self.G.parameters()]), p=2)
-                self.plot_param(D_loss=D_loss, G_loss=G_loss)
+
                 self.plot_grad(gd=gd, gg=gg)
                 self.plot_d(d_real, d_fake)
                 if self.count % self.show_iter == 0:
@@ -810,39 +814,55 @@ def train_mnist():
     # trainer.load_checkpoint('checkpoints/0.00000MNIST-0.0001/backup/epoch21-D1.pth', count=32000, load_d=True, load_g=True)
 
 
-def trains():
+def trains(start, end, step, epoch_num,
+           model_name, weight_prefix,
+           dataname, data_path, preload_path=None):
     import pandas as pd
     modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
-    print('MNIST')
-    lr = 0.001
-    z_dim = 96
-    D = dc_D()
-    G = dc_G(z_dim=z_dim)
-    dataset = MNIST('./datas/mnist', download=True, train=True, transform=transform)
+    lr = 0.05
+    z_dim = 128
+    if model_name == 'dc':
+        D = dc_D()
+        G = dc_G(z_dim=z_dim)
+    elif model_name == 'DC':
+        D = GoodDiscriminator()
+        G = GoodGenerator()
+
+    dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
     trainer = VisionData(D=D, G=G, device=device, dataset=dataset, z_dim=z_dim, batchsize=128,
                          lr_d=lr, lr_g=lr, show_iter=500,
-                         weight_decay=0.0, d_penalty=0.001, g_penalty=0, noise_shape=(64, z_dim),
+                         weight_decay=0.0, d_penalty=0.0, g_penalty=0, noise_shape=(64, z_dim),
                          gp_weight=0)
     d_loss_list = []
     g_loss_list = []
-    row_names = ['%d.pth' % i for i in range(500, 9500, 500)]
-    for name in row_names:
-        trainer.ini_weight()
-        weight_path = 'checkpoints/0.00000MNIST-0.0001/Adam-0.00010_%s' % name
+    row_names = ['%s%d.pth' % (weight_prefix, i) for i in range(start, end, step)]
+    for weight_path in row_names:
+        if preload_path is not None:
+            num_fcin = trainer.D.linear.in_features
+            trainer.D.linear = nn.Linear(num_fcin, 10)
+            trainer.load_checkpoint(preload_path, count=0, load_g=False, load_d=True)
+            trainer.D.linear = nn.Linear(num_fcin, 1)
+            trainer.D.to(device)
+            print('Load pretrained discriminator from %s' % preload_path)
         trainer.load_checkpoint(weight_path, count=0, load_g=True, load_d=False)
-        d_losses, g_losses = trainer.train_d(epoch_num=10, mode=modes[3], logname='fG', dataname='MNIST')
+        d_losses, g_losses = trainer.train_d(epoch_num=epoch_num, mode=modes[2], logname='train_is', dataname='CIFAR')
         d_loss_list.append(d_losses)
         g_loss_list.append(g_losses)
     df = pd.DataFrame(d_loss_list, index=row_names)
     gf = pd.DataFrame(g_loss_list, index=row_names)
     print(df, gf)
-    df.to_csv(r'results/d_loss.csv')
-    gf.to_csv(r'results/g_loss.csv')
+    df.to_csv(r'eval_results/preCIFAR_d_loss.csv')
+    gf.to_csv(r'eval_results/preCIFAR_g_loss.csv')
 
 
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
-    train_mnist()
+    # train_mnist()
     # trains()
+    preload_path = 'checkpoints/pretrain/pretrain.pth'
+    chk = 'checkpoints/ACGD/ACGD-0.0100.010_'
+    trains(start=30000, end=210000, step=30000, epoch_num=2,
+           model_name='DC', weight_prefix=chk, preload_path=preload_path,
+           dataname='CIFAR10', data_path='cifar10')

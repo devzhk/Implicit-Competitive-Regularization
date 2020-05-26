@@ -7,7 +7,7 @@ import tflib.fid as fid
 
 BATCH_SIZE = 100
 N_CHANNEL = 3
-RESOLUTION = 32
+RESOLUTION = 64
 NUM_SAMPLES = 50000
 
 
@@ -40,7 +40,7 @@ def cal_inception_score_o(G, device, z_dim):
 
 
 def cal_fid_score(G, device, z_dim):
-    stats_path = 'tflib/data/fid_stats_cifar10_train.npz'
+    stats_path = 'tflib/data/fid_stats_lsun_train.npz'
     inception_path = fid.check_or_download_inception('tflib/model')
     f = np.load(stats_path)
     mu_real, sigma_real = f['mu'][:], f['sigma'][:]
@@ -50,7 +50,7 @@ def cal_fid_score(G, device, z_dim):
     config.gpu_options.allow_growth = True
 
     all_samples = []
-    samples = torch.randn(NUM_SAMPLES, z_dim)
+    samples = torch.randn(NUM_SAMPLES, z_dim, 1, 1)
     for i in range(0, NUM_SAMPLES, BATCH_SIZE):
         samples_100 = samples[i:i + BATCH_SIZE]
         samples_100 = samples_100.to(device=device)

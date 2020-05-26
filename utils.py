@@ -33,10 +33,12 @@ def prepare_parser():
     parser.add_argument(
         '--dataset', type=str, default='CIFAR10')
     parser.add_argument(
-        '--datapath', type=str, default='../datas'
+        '--datapath', type=str, default='cifar10'
     )
     parser.add_argument(
         '--model', type=str, default='DCGAN')
+    parser.add_argument('--weight_path', type=str, default=None)
+    parser.add_argument('--startPoint', type=int, default=0)
     parser.add_argument(
         '--dropout', action='store_true', default=False)
     parser.add_argument(
@@ -84,6 +86,8 @@ def prepare_parser():
 def eval_parser():
     usage = 'Parser for eval'
     parser = ArgumentParser(description=usage)
+    parser.add_argument('--model', type=str)
+    parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--z_dim', type=int, default=128)
     parser.add_argument('--begin', type=int, default=4000)
     parser.add_argument('--end', type=int, default=400000)

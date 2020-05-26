@@ -16,8 +16,10 @@ from torchvision.models.inception import inception_v3
 import torchvision.utils as vutils
 
 from GANs.models import GoodGenerator, GoodDiscriminator
+from GANs import ResNet32Generator, ResNet32Discriminator, \
+    DC_generator, DC_discriminator
 from utils import prepare_parser
-
+from train_utils import get_data
 
 
 def transform(x):
@@ -45,10 +47,13 @@ def weights_init_g(m):
 
 
 class WGAN_GP():
-    def __init__(self, D, G, device, dataset, z_dim=8, batchsize=256,
+    def __init__(self, model_name, D, G,
+                 device, dataset, z_dim=8, batchsize=256,
                  lr_d=1e-3, lr_g=1e-3, show_iter=100,
                  gp_weight=10.0, d_penalty=0.0, d_iter=1,
-                 noise_shape=(64, 8), gpu_num=1):
+                 noise_shape=(64, 8), gpu_num=1,
+                 weight_path=None, startPoint=0):
+        self.model_name = model_name
         self.lr_d = lr_d
         self.lr_g = lr_g
         self.batchsize = batchsize
@@ -60,6 +65,7 @@ class WGAN_GP():
         self.gp_weight = gp_weight
         self.d_penalty = d_penalty
         self.d_iter = d_iter
+        self.startPoint = startPoint
         self.dataloader = DataLoader(dataset=dataset, batch_size=self.batchsize,
                                      shuffle=True, drop_last=True)
         print('Discriminator learning rate: %.5f \n'
@@ -69,13 +75,16 @@ class WGAN_GP():
               % (self.lr_d, self.lr_g, self.d_penalty, self.gp_weight))
         self.D = D.to(self.device)
         self.G = G.to(self.device)
+        self.d_optim = optim.Adam(self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.99))
+        self.g_optim = optim.Adam(self.G.parameters(), lr=self.lr_g, betas=(0.5, 0.99))
+        if weight_path is None:
+            self.D.apply(weights_init_d)
+            self.G.apply(weights_init_g)
+        else:
+            self.load_checkpoint(weight_path)
         if gpu_num > 1:
             self.D = nn.DataParallel(self.D, list(range(gpu_num)))
             self.G = nn.DataParallel(self.G, list(range(gpu_num)))
-        self.D.apply(weights_init_d)
-        self.G.apply(weights_init_g)
-        self.d_optim = optim.Adam(self.D.parameters(), lr=self.lr_d, betas=(0.5, 0.99))
-        self.g_optim = optim.Adam(self.G.parameters(), lr=self.lr_g, betas=(0.5, 0.99))
         self.criterion = nn.BCEWithLogitsLoss()
         self.fixed_noise = torch.randn(noise_shape, device=device)
 
@@ -88,8 +97,16 @@ class WGAN_GP():
         self.f = open(path + '/metrics.csv', 'w')
         self.iswriter = csv.DictWriter(self.f, feildnames)
 
+    def load_checkpoint(self, path):
+        chk = torch.load(path)
+        self.D.load_state_dict(chk['D'])
+        self.G.load_state_dict(chk['G'])
+        self.d_optim.load_state_dict(chk['D_optimizer'])
+        self.g_optim.load_state_dict(chk['G_optimizer'])
+        print('Load checkpoint from %s' % path)
+
     def save_checkpoint(self, path, dataset):
-        chk_name = 'rebuttal/%s-%.5f/' % (dataset, self.lr_d)
+        chk_name = 'checkpoints/%s-%.5f/' % (dataset, self.lr_d)
         if not os.path.exists(chk_name):
             os.makedirs(chk_name)
         try:
@@ -222,7 +239,7 @@ class WGAN_GP():
                     path = 'figs/%s/' % dirname
                     if not os.path.exists(path):
                         os.makedirs(path)
-                    vutils.save_image(img, path + 'iter_%d.png' % self.count)
+                    vutils.save_image(img, path + 'bniter_%d.png' % (self.count + self.startPoint))
                     timer = time.time()
                 if self.count % 5000 == 0:
                     with torch.no_grad():
@@ -243,7 +260,8 @@ class WGAN_GP():
                         #     self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
                         self.iswriter.writerow(content)
                         self.f.flush()
-                    self.save_checkpoint(path='wgan-%.5f_%d.pth' % (self.lr_d, self.count),
+                    self.save_checkpoint(path='%s-%.5f_%d.pth' % (self.model_name, self.lr_d,
+                                                                    self.count + self.startPoint),
                                          dataset=dataname)
                 self.count += 1
         self.f.close()
@@ -252,19 +270,29 @@ class WGAN_GP():
 def train_cifar(config):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
-    print('CIFAR10')
+
     # learning_rate = 0.0001
     # batch_size = 64
     # z_dim = 128
-    D = GoodDiscriminator()
-    G = GoodGenerator()
-    dataset = CIFAR10(root='../datas/cifar10', train=True, transform=transform, download=True)
-    trainer = WGAN_GP(D=D, G=G, device=device, dataset=dataset, z_dim=config['z_dim'], batchsize=config['batchsize'],
+    if config['model'] == 'dc':
+        D = GoodDiscriminator()
+        G = GoodGenerator()
+    elif config['model'] == 'ResGAN':
+        D = ResNet32Discriminator(n_in=3, num_filters=128, batchnorm=False)
+        G = ResNet32Generator(z_dim=config['z_dim'], num_filters=128, batchnorm=True)
+    elif config['model'] == 'DCGAN':
+        D = DC_discriminator()
+        G = DC_generator(z_dim=config['z_dim'])
+    dataset = get_data(dataname=config['dataset'], path='../datas/%s' % config['datapath'])
+    # dataset = CIFAR10(root='../datas/cifar10', train=True, transform=transform, download=True)
+    trainer = WGAN_GP(model_name='dc-wgp', D=D, G=G,
+                      device=device, dataset=dataset, z_dim=config['z_dim'], batchsize=config['batchsize'],
                       lr_d=config['lr_d'], lr_g=config['lr_g'],
                       show_iter=config['show_iter'],
                       gp_weight=config['gp_weight'], d_penalty=config['d_penalty'],
                       d_iter=config['d_iter'], noise_shape=(64, config['z_dim']),
-                      gpu_num=config['gpu_num'])
+                      gpu_num=config['gpu_num'],
+                      weight_path=config['weight_path'], startPoint=config['startPoint'])
     trainer.train_epoch(is_flag=config['eval_is'], fid_flag=config['eval_fid'],
                         epoch_num=config['epoch_num'], dirname=config['logdir'], dataname=config['dataset'],
                         gp=True, d_penalty=config['d_penalty'])
