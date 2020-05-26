@@ -71,7 +71,7 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
     grad_list = []
     for i, p in enumerate(params):
         if grad_grad[i] is None:
-            grad_list.append(torch.zeros_like(p))
+            grad_list.append(torch.zeros_like(p).view(-1))
         else:
             grad_list.append(grad_grad[i].contiguous().view(-1))
     hvp = torch.cat(grad_list)
