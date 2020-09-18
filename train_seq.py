@@ -205,12 +205,13 @@ def train_g(epoch_num=10, logdir='test',
         writer.close()
 
 
-def train(epoch_num=10, milestone=None, optim_type='ACGD',
+def train(epoch_num=10, milestone=None, optim_type='Adam',
+          lr_d=1e-4, lr_g=1e-4,
           startPoint=None, start_n=0,
           z_dim=128, batchsize=64,
           loss_name='WGAN', model_name='dc', data_path='None',
           show_iter=100, logdir='test', dataname='cifar10',
-          device='cpu', gpu_num=1, collect_info=False):
+          device='cpu', gpu_num=1, saturating=False):
     dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
@@ -220,8 +221,8 @@ def train(epoch_num=10, milestone=None, optim_type='ACGD',
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     writer = SummaryWriter(log_dir='logs/%s/%s' % (logdir, current_time))
-    d_optimizer = Adam(D.paremeters(), betas=(0.0, 0.999))
-    g_optimizer = Adam(G.paremeters(), betas=(0.0, 0.999))
+    d_optimizer = Adam(D.parameters(), lr=lr_d, betas=(0.5, 0.999))
+    g_optimizer = Adam(G.parameters(), lr=lr_g, betas=(0.5, 0.999))
     if startPoint is not None:
         chk = torch.load(startPoint)
         D.load_state_dict(chk['D'])
@@ -252,18 +253,22 @@ def train(epoch_num=10, milestone=None, optim_type='ACGD',
             d_fake = D(fake_x)
             d_loss = get_loss(name=loss_name, g_loss=False, d_real=d_real, d_fake=d_fake)
             d_optimizer.zero_grad()
+            g_optimizer.zero_grad()
             d_loss.backward()
             d_optimizer.step()
 
-            if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
-                z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
+            if not saturating:
+                if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+                    z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
+                else:
+                    z = torch.randn((d_real.shape[0], z_dim), device=device)
+                fake_x = G(z)
+                d_fake = D(fake_x)
+                g_loss = get_loss(name=loss_name, g_loss=True, d_fake=d_fake)
+                g_optimizer.zero_grad()
+                g_loss.backward()
             else:
-                z = torch.randn((d_real.shape[0], z_dim), device=device)
-            fake_x = G(z)
-            d_fake = D(fake_x)
-            g_loss = get_loss(name=loss_name, g_loss=True, d_fake=d_fake)
-            g_optimizer.zero_grad()
-            g_loss.backward()
+                g_loss = d_loss
             g_optimizer.step()
 
             writer.add_scalar('Loss/D loss', d_loss.item(), count)
@@ -285,27 +290,44 @@ def train(epoch_num=10, milestone=None, optim_type='ACGD',
                 save_checkpoint(path=logdir,
                                 name='%s-%s_%d.pth' % (optim_type, model_name, count + start_n),
                                 D=D, G=G, optimizer=d_optimizer, g_optimizer=g_optimizer)
+            count += 1
     writer.close()
-
 
 
 if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
+    parser = train_seq_parser()
+    config = vars(parser.parse_args())
+    print(config)
+    # chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
     # train_d(epoch_num=30, show_iter=500,
     #         logdir='select', loss_name='JSD',
     #         model_weight=chk_path, load_d=True, load_g=True,
     #         compare_path=chk_path, info_time=100, run_select='figs/select/Fixed_1000.pt',
     #         device=device)
-    train_d(epoch_num=2, show_iter=500, optim='BCGD2',
-            logdir='sgd', loss_name='JSD',
-            model_weight=chk_path, load_d=True, load_g=True,
-            compare_path=None, info_time=100,
-            device=device)
+    # train_d(epoch_num=2, show_iter=500, optim='BCGD2',
+    #         logdir='sgd', loss_name='JSD',
+    #         model_weight=chk_path, load_d=True, load_g=True,
+    #         compare_path=None, info_time=100,
+    #         device=device)
 
     # fixG_path = 'checkpoints/sgd/FixG-0.010_14000.pth'
     # train_g(epoch_num=30, show_iter=500,
     #         logdir='sgd_new', loss_name='JSD',
     #         model_weight=fixG_path, load_d=True, load_g=True,
     #         device=device)
+
+    train(epoch_num=config['epoch_num'], milestone=[0, 0],
+          optim_type=config['optimizer'],
+          lr_d=config['lr_d'], lr_g=config['lr_g'],
+          startPoint=config['checkpoint'],
+          start_n=config['startn'],
+          show_iter=config['show_iter'],
+          logdir=config['logdir'],
+          z_dim=config['z_dim'], batchsize=config['batchsize'],
+          data_path=config['datapath'], dataname=config['dataset'],
+          loss_name=config['loss_type'],
+          model_name=config['model'],
+          device=device, gpu_num=config['gpu_num'],
+          saturating=False)

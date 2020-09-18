@@ -16,9 +16,10 @@ from optims import ACGD, BCGD, ICR
 from train_utils import get_data, weights_init_d, weights_init_g, \
     get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler, get_model
 from losses import get_loss
-
+from utils import cgd_trainer
+from torchvision.models import resnet18
 # seed = torch.randint(0, 1000000, (1,))
-seed = 1
+seed = 2020
 torch.manual_seed(seed=seed)
 print('random seed : %d' % seed)
 
@@ -140,7 +141,8 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
 def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
               startPoint=None, start_n=0,
               z_dim=128, batchsize=64,
-              tols={'tol':1e-12, 'atol':1e-20},
+              tols={'tol':1e-10, 'atol':1e-16},
+              l2_penalty=0.0, momentum=0.0,
               loss_name='WGAN', model_name='dc', data_path='None',
               show_iter=100, logdir='test', dataname='cifar10',
               device='cpu', gpu_num=1, collect_info=False):
@@ -158,7 +160,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
     writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
     if optim_type == 'BCGD':
         optimizer = BCGD(max_params=G.parameters(), min_params=D.parameters(),
-                         lr_max=lr_g, lr_min=lr_d,
+                         lr_max=lr_g, lr_min=lr_d, momentum=momentum,
                          tol=tols['tol'], atol=tols['atol'],
                          device=device)
         scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
@@ -170,7 +172,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
         optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(),
                          lr_max=lr_g, lr_min=lr_d,
                          tol=tols['tol'], atol=tols['atol'],
-                         device=device)
+                         device=device, solver='cg')
         scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
     if startPoint is not None:
         chk = torch.load(startPoint)
@@ -199,7 +201,9 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
                 z = torch.randn((d_real.shape[0], z_dim), device=device)
             fake_x = G(z)
             d_fake = D(fake_x)
-            loss = get_loss(name=loss_name, g_loss=False, d_real=d_real, d_fake=d_fake)
+            loss = get_loss(name=loss_name, g_loss=False,
+                            d_real=d_real, d_fake=d_fake,
+                            l2_weight=l2_penalty, D=D)
             optimizer.zero_grad()
             optimizer.step(loss)
 
@@ -240,32 +244,38 @@ if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
+    parser = cgd_trainer()
+    config = vars(parser.parse_args())
+    print(config)
     # chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
     # generate_data(model_weight=chk_path, path='figs/select/Fixed_1000.pt', device=device)
     # train_mnist(epoch_num=30, show_iter=500, logdir='select',
     #             model_weight=chk_path, load_d=True, load_g=True,
     #             compare_path=chk_path, info_time=100, run_select='figs/select/Fixed_1000.pt',
     #             device=device)
-    start_n = 0
+
+    start_n = config['startn']
     # chk_path = 'checkpoints/ACGD/ACGD-Resnet0.010_%d.pth' % start_n
     # chk_path = 'checkpoints/ACGD/ACGD-dc0.010_%d.pth' % start_n
     # test 132000 64, ACGD 45000 128
     # chk_path = 'checkpoints/ACGD/ACGD-DCGAN0.010_%d.pth' % start_n
-    chk_path = None
+    chk_path = config['checkpoint']
     # train_cgd(epoch_num=40, milestone=(25, 30, 35), show_iter=500, logdir='cifar',
     #           dataname='CIFAR10', loss_name='WGAN', model_name='dc',
     #           device=device, gpu_num=2, collect_info=True)
-    factor = 1
-    # lr = 0.0001 * math.sqrt(factor)
-    lr = 0.01
-    print(lr)
-    milestones = {'0': (lr, lr)}
-    tols = {'tol': 1e-10, 'atol': 1e-16}
+
+    lr_g = config['lr_g']
+    lr_d = config['lr_d']
+    milestones = {'0': (lr_g, lr_d)}
+    tols = {'tol': config['tol'], 'atol': config['atol']}
     print(tols)
-    train_cgd(epoch_num=600, milestone=milestones,
-              optim_type='BCGD', startPoint=chk_path, start_n=start_n,
-              show_iter=5000, logdir='ACGD64',
-              z_dim=128, batchsize=64 * factor,
-              data_path='cifar10', dataname='CIFAR10',
-              loss_name='WGAN', model_name='dc', tols=tols,
-              device=device, gpu_num=2, collect_info=True)
+    train_cgd(epoch_num=config['epoch_num'], milestone=milestones,
+              optim_type=config['optimizer'],
+              startPoint=chk_path, start_n=start_n,
+              show_iter=config['show_iter'], logdir=config['logdir'],
+              z_dim=config['z_dim'], batchsize=config['batchsize'],
+              l2_penalty=0.0, momentum=config['momentum'],
+              data_path=config['datapath'], dataname=config['dataset'],
+              loss_name=config['loss_type'],
+              model_name=config['model'], tols=tols,
+              device=device, gpu_num=config['gpu_num'], collect_info=False)

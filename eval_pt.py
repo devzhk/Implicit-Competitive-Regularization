@@ -6,20 +6,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torchvision.models.inception import inception_v3
-from GANs.models import GoodGenerator, DC_generator
+from GANs.models import GoodGenerator, DC_generator, dc_G
 from GANs import ResNet32Generator
 from utils import eval_parser
-from metrics.is_biggan import load_inception_net, torch_calculate_frechet_distance, torch_cov
+from metrics.is_biggan import load_inception_net, torch_calculate_frechet_distance, \
+    torch_cov, numpy_calculate_frechet_distance
 
 
 class evalor():
-    def __init__(self, G, z_dim, model_dir, log_path, device, batchsize=100):
+    def __init__(self, G, z_dim, model_dir, log_path, device, batchsize=100, dim=1):
         self.is_flag = False
         self.fid_flag = False
         self.log_path = log_path
         self.device = device
         self.G = G
         self.z_dim = z_dim
+        self.dim = dim
         self.batchsize = batchsize
         self.model_dir = model_dir
         self.init_writer()
@@ -73,7 +75,10 @@ class evalor():
 
     # Hongkai's IS implementation
     def generate_data(self):
-        z = torch.randn((self.batchsize, self.z_dim), device=self.device)
+        if self.dim == 3:
+            z = torch.randn((self.batchsize, self.z_dim, 1, 1), device=self.device)
+        else:
+            z = torch.randn((self.batchsize, self.z_dim), device=self.device)
         data = self.G(z)
         return data
 
@@ -97,10 +102,12 @@ class evalor():
         return np.mean(split_score), np.std(split_score)
 
     def load_fid(self, dataname):
-        if dataname == 'cifar10':
-            stats_path = 'metrics/stats/CIFAR10_inception_moments.npz'
-        elif dataname == 'lsun-bedroom':
-            stats_path = 'metrics/stats/LSUN-bedroom_inception_moments.npz'
+        # if dataname == 'cifar10':
+        #     stats_path = 'metrics/stats/CIFAR10_inception_moments.npz'
+        # elif dataname == 'lsun-bedroom':
+        #     stats_path = 'metrics/stats/LSUN-bedroom_inception_moments.npz'
+        # elif dataname == 'MNIST':
+        stats_path = 'metrics/stats/%s_inception_moments.npz' % dataname
         print('Load stats of %s' % dataname)
         f = np.load(stats_path)
         self.mu_real, self.sigma_real = f['mu'][:], f['sigma'][:]
@@ -123,25 +130,37 @@ class evalor():
         pool, logits = self.accumulate_activations()
         print('Calculating FID...')
         mu, sigma = torch.mean(pool, 0), torch_cov(pool, rowvar=False)
-        fid_score = torch_calculate_frechet_distance(mu, sigma, self.mu_real, self.sigma_real)
-        return fid_score.cpu().numpy()
+        # fid_score = torch_calculate_frechet_distance(mu, sigma, self.mu_real, self.sigma_real)
+        # return fid_score.cpu().numpy()
+        fid_score = numpy_calculate_frechet_distance(mu.cpu().numpy(), sigma.cpu().numpy(),
+                                                     self.mu_real.cpu().numpy(),
+                                                     self.sigma_real.cpu().numpy())
+        return fid_score
 
 
 if __name__ == '__main__':
     parser = eval_parser()
     config = vars(parser.parse_args())
     print(config)
+    print('numpy calculation')
     device = torch.device('cuda:0')
-    if config['model'] == 'dc':
+    model = config['model']
+    z_dim = config['z_dim']
+    if model == 'dc':
         G = GoodGenerator()
-    elif config['model'] == 'ResGAN':
-        G = ResNet32Generator(z_dim=config['z_dim'], num_filters=128, batchnorm=True)
-    elif config['model'] == 'DCGAN':
-        G = DC_generator(z_dim=config['z_dim'])
+    elif model == 'ResGAN':
+        G = ResNet32Generator(z_dim=z_dim, num_filters=128, batchnorm=True)
+    elif model == 'DCGAN':
+        G = DC_generator(z_dim=z_dim)
+    elif model == 'mnist':
+        G = dc_G(z_dim=z_dim)
     G.to(device)
     G.eval()
-    evalor = evalor(G=G, z_dim=config['z_dim'],
-                    model_dir=config['model_dir'], device=device, log_path=config['logdir'])
+    evalor = evalor(G=G, z_dim=z_dim,
+                    model_dir=config['model_dir'],
+                    device=device,
+                    log_path=config['logdir'],
+                    dim=config['dim'])
     evalor.eval_metrics(begin=config['begin'], end=config['end'], step=config['step'],
                         is_flag=config['eval_is'], fid_flag=config['eval_fid'],
                         dataname=config['dataset'])

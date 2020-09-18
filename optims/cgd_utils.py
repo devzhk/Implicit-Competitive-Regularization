@@ -35,6 +35,8 @@ def conjugate_gradient(grad_x, grad_y,
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
     residual_tol = tol * rdotr
+    if rdotr < residual_tol or rdotr < atol:
+        return x, 1
 
     for i in range(nsteps):
         # To compute Avp
@@ -59,7 +61,11 @@ def conjugate_gradient(grad_x, grad_y,
 
 def Hvp_vec(grad_vec, params, vec, retain_graph=False):
     '''
-    return Hessian vector product
+    Parameters:
+        - grad_vec: Tensor of which the Hessian vector product will be computed
+        - params: list of params, w.r.t which the Hessian will be computed
+        - vec: The "vector" in Hessian vector product
+    return: Hessian vector product
     '''
     if torch.isnan(grad_vec).any():
         raise ValueError('Gradvec nan')
@@ -106,8 +112,10 @@ def general_conjugate_gradient(grad_x, grad_y,
         x = torch.zeros(b.shape[0], device=device)
         r = b.clone().detach()
     else:
-        h1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=lr_x * x, retain_graph=True).mul_(lr_y)
-        h2 = Hvp_vec(grad_vec=grad_y, params=x_params, vec=h1, retain_graph=True).mul_(lr_x)
+        h1 = Hvp_vec(grad_vec=grad_x, params=y_params,
+                     vec=lr_x * x, retain_graph=True).mul_(lr_y)
+        h2 = Hvp_vec(grad_vec=grad_y, params=x_params,
+                     vec=h1, retain_graph=True).mul_(lr_x)
         Avx = x + h2
         r = b.clone().detach() - Avx
 
@@ -119,14 +127,18 @@ def general_conjugate_gradient(grad_x, grad_y,
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
     residual_tol = tol * rdotr
+    if rdotr < residual_tol or rdotr < atol:
+        return x, 1
     for i in range(nsteps):
         # To compute Avp
         # h_1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=lr_x * p, retain_graph=True)
-        h_1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=lr_x * p, retain_graph=True).mul_(lr_y)
+        h_1 = Hvp_vec(grad_vec=grad_x, params=y_params,
+                      vec=lr_x * p, retain_graph=True).mul_(lr_y)
         # h_1.mul_(lr_y)
         # lr_y * D_yx * b
         # h_2 = Hvp_vec(grad_vec=grad_y, params=x_params, vec=lr_y * h_1, retain_graph=True)
-        h_2 = Hvp_vec(grad_vec=grad_y, params=x_params, vec=h_1, retain_graph=True).mul_(lr_x)
+        h_2 = Hvp_vec(grad_vec=grad_y, params=x_params,
+                      vec=h_1, retain_graph=True).mul_(lr_x)
         # h_2.mul_(lr_x)
         # lr_x * D_xy * lr_y * D_yx * b
         Avp_ = p + h_2
@@ -141,6 +153,26 @@ def general_conjugate_gradient(grad_x, grad_y,
         if rdotr < residual_tol or rdotr < atol:
             break
     return x, i + 1
+
+
+def gd_solver(grad_x, grad_y,
+              x_params, y_params,
+              b, x=None, iter_num=1,
+              lr_x=1.0, lr_y=1.0,
+              rho=0.9, beta=0.1,
+              device=torch.device('cpu')):
+    '''
+    slove inversion by gradient descent
+    '''
+    lr_x = lr_x.sqrt()
+    if x is None:
+        x = torch.zeros(b.shape[0], device=device)
+    for i in range(iter_num):
+        h1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=lr_x * x, retain_graph=True).mul_(lr_y)
+        h2 = Hvp_vec(grad_vec=grad_y, params=x_params, vec=h1, retain_graph=True).mul_(lr_x)
+        delta_x = x + h2 - b
+        x = rho * x - beta * delta_x
+    return x, 1
 
 
 def zero_grad(params):

@@ -5,7 +5,7 @@ import torchvision.utils as vutils
 
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import CIFAR10, MNIST, LSUN
+from torchvision.datasets import CIFAR10, MNIST, LSUN, ImageFolder
 from GANs import dc_G, dc_D, \
     GoodGenerator, GoodDiscriminator, GoodDiscriminatorbn, GoodDiscriminatord, \
     DC_generator, DC_discriminator, \
@@ -15,15 +15,6 @@ from GANs import dc_G, dc_D, \
 mnist_tf = transforms.Compose([transforms.ToTensor(),
                                transforms.Normalize((0.5,), (0.5,))
                                ])
-
-
-def generate_image(model_weight,path, z_dim,
-                   num=1, device='cpu'):
-    chk = torch.load(model_weight)
-    G = GoodGenerator()
-    G.load_state_dict(chk['G'])
-
-
 
 
 def generate_data(model_weight, path, z_dim=96, device='cpu'):
@@ -113,6 +104,9 @@ def get_model(model_name, z_dim):
     elif model_name == 'dcSN':
         D = GoodSNDiscriminator()
         G = GoodGenerator()
+    elif model_name == 'mnist':
+        D = dc_D()
+        G = dc_G(z_dim=z_dim)
     else:
         print('No matching result of :')
     print(model_name)
@@ -150,6 +144,14 @@ def get_data(dataname, path, img_size=64):
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ]))
         print('LSUN-bedroom')
+    elif dataname == 'CelebA':
+        dataset = ImageFolder(root=path,
+                              transform=transforms.Compose([
+                                transforms.Resize(64),
+                                transforms.CenterCrop(64),
+                                transforms.ToTensor(),
+                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                              ]))
     return dataset
 
 

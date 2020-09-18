@@ -3,15 +3,20 @@ import math
 import torch
 import torch.autograd as autograd
 
-from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec
+from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec, gd_solver
 
-class NCGD(object):
+
+class SCGD(object):
+    '''
+    support sgd solver option
+    '''
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
                  eps=1e-5, beta=0.99,
                  tol=1e-12, atol=1e-20,
                  device=torch.device('cpu'),
-                 solve_x=False, collect_info=True):
+                 solve_x=False, collect_info=True,
+                 solver='cg'):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
@@ -19,13 +24,15 @@ class NCGD(object):
                       'tol': tol, 'atol': atol,
                       'beta': beta, 'step': 0,
                       'old_max': None, 'old_min': None,  # start point of CG
-                      'sq_exp_avg_max': None, 'sq_exp_avg_min': None}  # save last update
+                      'sq_exp_avg_max': None, 'sq_exp_avg_min': None,
+                      'update_max': 0.0, 'update_min': 0.0}  # Summation of previous updates
         self.info = {'grad_x': None, 'grad_y': None,
                      'hvp_x': None, 'hvp_y': None,
                      'cg_x': None, 'cg_y': None,
                      'time': 0, 'iter_num': 0}
         self.device = device
         self.collect_info = collect_info
+        self.solver= solver
 
     def zero_grad(self):
         zero_grad(self.max_params)
@@ -91,11 +98,17 @@ class NCGD(object):
 
         if self.state['solve_x']:
             p_y.mul_(lr_min.sqrt())
-            cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                        x_params=self.min_params, y_params=self.max_params,
-                                                        b=p_y, x=self.state['old_min'],
-                                                        tol=tol, atol=atol,
-                                                        lr_x=lr_min, lr_y=lr_max, device=self.device)
+            if self.solver == 'cg':
+                cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                                                            x_params=self.min_params, y_params=self.max_params,
+                                                            b=p_y, x=self.state['old_min'],
+                                                            tol=tol, atol=atol,
+                                                            lr_x=lr_min, lr_y=lr_max, device=self.device)
+            elif self.solver == 'gd':
+                cg_y, iter_num = gd_solver(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                                           x_params=self.min_params, y_params=self.max_params,
+                                           b=p_y, x=self.state['old_min'],
+                                           lr_x=lr_min, lr_y=lr_max, device=self.device)
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, min_update).detach_()
@@ -104,11 +117,17 @@ class NCGD(object):
             old_max = hcg.mul(lr_max.sqrt())
         else:
             p_x.mul_(lr_max.sqrt())
-            cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                        x_params=self.max_params, y_params=self.min_params,
-                                                        b=p_x, x=self.state['old_max'],
-                                                        tol=tol, atol=atol,
-                                                        lr_x=lr_max, lr_y=lr_min, device=self.device)
+            if self.solver == 'cg':
+                cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                                                            x_params=self.max_params, y_params=self.min_params,
+                                                            b=p_x, x=self.state['old_max'],
+                                                            tol=tol, atol=atol,
+                                                            lr_x=lr_max, lr_y=lr_min, device=self.device)
+            elif self.solver == 'gd':
+                cg_x, iter_num = gd_solver(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                                           x_params=self.max_params, y_params=self.min_params,
+                                           b=p_x, x=self.state['old_max'],
+                                           lr_x=lr_max, lr_y=lr_min, device=self.device)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
             hcg = Hvp_vec(grad_x_vec, self.min_params, max_update).detach_()
@@ -122,8 +141,21 @@ class NCGD(object):
             timer = time.time() - timer
             self.info.update({'time': timer, 'iter_num': iter_num,
                               'hvp_x': norm_px, 'hvp_y': norm_py})
+        self.state['update_max'] += max_update
+        self.state['update_min'] += min_update
+        if self.collect_info:
+            norm_gx = torch.norm(grad_x_vec, p=2).item()
+            norm_gy = torch.norm(grad_y_vec, p=2).item()
+            norm_cgx = torch.norm(max_update, p=2).item()
+            norm_cgy = torch.norm(min_update, p=2).item()
+            self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
+                              'cg_x': norm_cgx, 'cg_y': norm_cgy})
+        self.state['solve_x'] = False if self.state['solve_x'] else True
 
+    def update(self, n):
         index = 0
+        max_update = self.state['update_max'].div(n)
+        min_update = self.state['update_min'].div(n)
         for p in self.max_params:
             p.data.add_(max_update[index: index + p.numel()].reshape(p.shape))
             index += p.numel()
@@ -134,14 +166,9 @@ class NCGD(object):
             p.data.add_(min_update[index: index + p.numel()].reshape(p.shape))
             index += p.numel()
         assert index == min_update.numel(), 'Minimizer CG size mismatch'
+        self.state['update_max'] = 0.0
+        self.state['update_min'] = 0.0
 
-        if self.collect_info:
-            norm_gx = torch.norm(grad_x_vec, p=2).item()
-            norm_gy = torch.norm(grad_y_vec, p=2).item()
-            norm_cgx = torch.norm(max_update, p=2).item()
-            norm_cgy = torch.norm(min_update, p=2).item()
-            self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
-                              'cg_x': norm_cgx, 'cg_y': norm_cgy})
-        self.state['solve_x'] = False if self.state['solve_x'] else True
+
 
 

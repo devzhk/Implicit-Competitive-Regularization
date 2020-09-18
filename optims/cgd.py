@@ -137,12 +137,14 @@ class BCGD(object):
 
         momentum = self.state['momentum']
         exp_avg_max, exp_avg_min = self.state['exp_avg_max'], self.state['exp_avg_min']
-        if momentum != 0:  # TODO test this code: not sure about exp_avg_* initial shape
+        if momentum != 0:
             bias_correction = 1 - momentum ** time_step
             lr_max /= bias_correction
             lr_min /= bias_correction
-            cg_x = exp_avg_max.mul(momentum) + cg_x.mul(1 - momentum)
-            cg_y = exp_avg_min.mul(momentum) + cg_y.mul(1 - momentum)
+            cg_x = exp_avg_max * momentum + cg_x.mul(1 - momentum)
+            cg_y = exp_avg_min * momentum + cg_y.mul(1 - momentum)
+        self.state.update({'exp_avg_max': cg_x,
+                           'exp_avg_min': cg_y})
         index = 0
         for p in self.max_params:
             p.data.add_(lr_max * cg_x[index: index + p.numel()].reshape(p.shape))
@@ -235,7 +237,7 @@ class BCGD(object):
 class BCGD2(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3, device=torch.device('cpu'),
-                 tol=1e-12, atol=1e-20,
+                 tol=1e-10, atol=1e-16,
                  update_max=False, collect_info=True):
         self.max_params = list(max_params)
         self.min_params = list(min_params)

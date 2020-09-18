@@ -1,6 +1,6 @@
 #! /bin/bash
 CUDA_VISIBLE_DEVICES=1 python3.6 eval_pt.py \
---dataset lsun-bedroom \
+--dataset LSUN-bedroom \
 --model DCGAN \
 --z_dim 100 \
 --begin 0 \

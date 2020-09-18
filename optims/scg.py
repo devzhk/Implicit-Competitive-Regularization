@@ -3,15 +3,18 @@ import math
 import torch
 import torch.autograd as autograd
 
-from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec
+from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec, gd_solver
+from .scg_utils import sto_conjugate_gradient
 
-class NCGD(object):
+class SCG(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
                  eps=1e-5, beta=0.99,
-                 tol=1e-12, atol=1e-20,
+                 tol=1e-10, atol=1e-16,
                  device=torch.device('cpu'),
-                 solve_x=False, collect_info=True):
+                 solve_x=False, collect_info=True,
+                 dataloader=None,
+                 solver='cg'):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
@@ -26,6 +29,12 @@ class NCGD(object):
                      'time': 0, 'iter_num': 0}
         self.device = device
         self.collect_info = collect_info
+        self.solver= solver
+        def gen_data():
+            while True:
+                for x in dataloader:
+                    yield x
+        self.dataloader = gen_data()
 
     def zero_grad(self):
         zero_grad(self.max_params)
@@ -48,7 +57,7 @@ class NCGD(object):
         print('Maximizing side learning rate: {:.4f}\n '
               'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
 
-    def step(self, loss):
+    def step(self, closure, img):
         lr_max = self.state['lr_max']
         lr_min = self.state['lr_min']
         beta = self.state['beta']
@@ -57,7 +66,7 @@ class NCGD(object):
         atol = self.state['atol']
         time_step = self.state['step'] + 1
         self.state['step'] = time_step
-
+        loss = closure(img)
         grad_x = autograd.grad(loss, self.max_params, create_graph=True, retain_graph=True)
         grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
         grad_y = autograd.grad(loss, self.min_params, create_graph=True, retain_graph=True)
@@ -91,11 +100,15 @@ class NCGD(object):
 
         if self.state['solve_x']:
             p_y.mul_(lr_min.sqrt())
-            cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                        x_params=self.min_params, y_params=self.max_params,
-                                                        b=p_y, x=self.state['old_min'],
-                                                        tol=tol, atol=atol,
-                                                        lr_x=lr_min, lr_y=lr_max, device=self.device)
+            cg_y, iter_num = sto_conjugate_gradient(closure=closure,
+                                                    dataloader=self.dataloader,
+                                                    x_params=self.min_params,
+                                                    y_params=self.max_params,
+                                                    b=p_y, x=self.state['old_min'],
+                                                    lr_x=lr_min, lr_y=lr_max,
+                                                    tol=tol, atol=atol,
+                                                    device=self.device)
+
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, min_update).detach_()
@@ -104,11 +117,14 @@ class NCGD(object):
             old_max = hcg.mul(lr_max.sqrt())
         else:
             p_x.mul_(lr_max.sqrt())
-            cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                        x_params=self.max_params, y_params=self.min_params,
-                                                        b=p_x, x=self.state['old_max'],
-                                                        tol=tol, atol=atol,
-                                                        lr_x=lr_max, lr_y=lr_min, device=self.device)
+            cg_x, iter_num = sto_conjugate_gradient(closure=closure,
+                                                    dataloader=self.dataloader,
+                                                    x_params=self.max_params,
+                                                    y_params=self.min_params,
+                                                    b=p_x, x=self.state['old_max'],
+                                                    lr_x=lr_max, lr_y=lr_min,
+                                                    tol=tol, atol=atol,
+                                                    device=self.device)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
             hcg = Hvp_vec(grad_x_vec, self.min_params, max_update).detach_()
@@ -143,5 +159,4 @@ class NCGD(object):
             self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
                               'cg_x': norm_cgx, 'cg_y': norm_cgy})
         self.state['solve_x'] = False if self.state['solve_x'] else True
-
-
+        return loss

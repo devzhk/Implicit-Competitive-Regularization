@@ -3,7 +3,7 @@ import math
 import torch
 import torch.autograd as autograd
 
-from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec
+from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec, gd_solver
 
 
 class ACGD(object):
@@ -12,7 +12,8 @@ class ACGD(object):
                  eps=1e-5, beta=0.99,
                  tol=1e-12, atol=1e-20,
                  device=torch.device('cpu'),
-                 solve_x=False, collect_info=True):
+                 solve_x=False, collect_info=True,
+                 solver='cg'):
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
@@ -27,6 +28,7 @@ class ACGD(object):
                      'time': 0, 'iter_num': 0}
         self.device = device
         self.collect_info = collect_info
+        self.solver= solver
 
     def zero_grad(self):
         zero_grad(self.max_params)
@@ -92,11 +94,17 @@ class ACGD(object):
 
         if self.state['solve_x']:
             p_y.mul_(lr_min.sqrt())
-            cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                        x_params=self.min_params, y_params=self.max_params,
-                                                        b=p_y, x=self.state['old_min'],
-                                                        tol=tol, atol=atol,
-                                                        lr_x=lr_min, lr_y=lr_max, device=self.device)
+            if self.solver == 'cg':
+                cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                                                            x_params=self.min_params, y_params=self.max_params,
+                                                            b=p_y, x=self.state['old_min'],
+                                                            tol=tol, atol=atol,
+                                                            lr_x=lr_min, lr_y=lr_max, device=self.device)
+            elif self.solver == 'gd':
+                cg_y, iter_num = gd_solver(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                                           x_params=self.min_params, y_params=self.max_params,
+                                           b=p_y, x=self.state['old_min'],
+                                           lr_x=lr_min, lr_y=lr_max, device=self.device)
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, min_update).detach_()
@@ -105,11 +113,17 @@ class ACGD(object):
             old_max = hcg.mul(lr_max.sqrt())
         else:
             p_x.mul_(lr_max.sqrt())
-            cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                        x_params=self.max_params, y_params=self.min_params,
-                                                        b=p_x, x=self.state['old_max'],
-                                                        tol=tol, atol=atol,
-                                                        lr_x=lr_max, lr_y=lr_min, device=self.device)
+            if self.solver == 'cg':
+                cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                                                            x_params=self.max_params, y_params=self.min_params,
+                                                            b=p_x, x=self.state['old_max'],
+                                                            tol=tol, atol=atol,
+                                                            lr_x=lr_max, lr_y=lr_min, device=self.device)
+            elif self.solver == 'gd':
+                cg_x, iter_num = gd_solver(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                                           x_params=self.max_params, y_params=self.min_params,
+                                           b=p_x, x=self.state['old_max'],
+                                           lr_x=lr_max, lr_y=lr_min, device=self.device)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
             hcg = Hvp_vec(grad_x_vec, self.min_params, max_update).detach_()
