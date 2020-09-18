@@ -3,7 +3,11 @@ datas/
 logs/
 results/
 figs/
-.idea
+checkpoints/
+scripts/
+metrics/stats/
+eval_results/
+.idea/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
