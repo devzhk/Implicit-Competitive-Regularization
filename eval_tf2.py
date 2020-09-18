@@ -1,9 +1,28 @@
+'''
+Code derived from https://github.com/tsc2017/Inception-Score
+Arguments:
+    --model: generator architecture
+    --dataset: the dataset to compare with
+    --z_dim: latent dimensionality
+    --dim: dim of latent tensor
+    --begin: the iteration number to begin from
+    --end: the iteration number to end with
+    --step: the step of iteration
+    --model_dir: the directory of model checkpoints
+    --log_dir: the directory to save the results
+    --eval_is: True or False to evaluate IS
+    --eval_fid: True or False to evaluate FID
+Outputs:
+csv file that records the scores of checkpoints
+'''
 import os
 import torch
 import csv
 import numpy as np
 from metrics.InceptionScore_tf2 import get_inception_score
-from GANs.models import GoodGenerator
+from GANs.models import GoodGenerator, DC_generator, dc_G
+from GANs import ResNet32Generator
+from utils import eval_parser
 
 BATCH_SIZE = 100
 N_CHANNEL = 3
@@ -74,7 +93,7 @@ class Evalor(object):
         self.writer.writerow(content)
         self.f.flush()
 
-    def eval_metrics(self, begin, end, step, is_flag=True, fid_flag=False):
+    def eval_metrics(self, begin, end, step, is_flag=True, fid_flag=False, dataname='CIFAR10'):
         print('%d ==> %d, step: %d' % (begin, end, step))
         self.is_flag = is_flag
         self.fid_flag = fid_flag
@@ -87,10 +106,25 @@ class Evalor(object):
 if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
-    G = GoodGenerator().to(device)
-    model_path = 'checkpoints/ACGD64/ACGD-dc0.010_'
-    logdir = 'eval_results/tfACGD64/'
+    parser = eval_parser()
+    config = vars(parser.parse_args())
+    print(config)
+    model = config['model']
+    z_dim = config['z_dim']
+    if model == 'dc':
+        G = GoodGenerator()
+    elif model == 'ResGAN':
+        G = ResNet32Generator(z_dim=z_dim, num_filters=128, batchnorm=True)
+    elif model == 'DCGAN':
+        G = DC_generator(z_dim=z_dim)
+    elif model == 'mnist':
+        G = dc_G(z_dim=z_dim)
+    G.to(device)
+    G.eval()
     evalor = Evalor(G=G, z_dim=128, dataset='cifar10',
-                    model_dir=model_path, log_path=logdir,
+                    model_dir=config['model_dir'],
+                    log_path=config['logdir'],
                     device=device)
-    evalor.eval_metrics(begin=300000, end=465000, step=5000)
+    evalor.eval_metrics(begin=config['begin'], end=config['end'], step=config['step'],
+                        is_flag=config['eval_is'], fid_flag=config['eval_fid'],
+                        dataname=config['dataset'])

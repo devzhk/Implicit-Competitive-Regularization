@@ -1,6 +1,6 @@
 '''
-From https://github.com/tsc2017/Inception-Score
-Code derived from https://github.com/openai/improved-gan/blob/master/inception_score/model.py and https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/gan/python/eval/python/classifier_metrics_impl.py
+Code derived from https://github.com/tsc2017/Inception-Score
+which is built upon https://github.com/openai/improved-gan/blob/master/inception_score/model.py and https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/gan/python/eval/python/classifier_metrics_impl.py
 
 Usage:
     Call get_inception_score(images, splits=10)
