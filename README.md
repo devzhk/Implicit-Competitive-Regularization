@@ -5,9 +5,8 @@ This code contains experiments for paper: 'Implicit competitive regularization i
 Quick demo for experiments : `train.ipynb`
 Repro code for paper: `VisionData.py`, `wgan_gp.py`
 
-**I will keep updating..**
 ## How to use new optimizer(ACGD) in our paper
-Copy `optimizers.py` and `cgd_utils.py` to your directory. 
+Package 'optims' contains the original Compeititive Gradient Descent (BCGD), and the adaptive Competitive Gradient Descent (ACGD). 
 **It's important to force cudnn to benchmark and pick the best algo.**
 ```python
 import torch
@@ -17,8 +16,9 @@ device = torch.device('cuda:0')
 lr = 0.0001
 G = Generator()
 D = Discriminator()
-optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(), lr=lr, device=device)
-# BCGD(max_params=G.parameters(), min_params=D.parameters(), lr=lr, device=device)
+optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(), lr_max=lr, lr_min=lr, device=device)
+# max_parems is maximizing the objective function while the min_params is trying to minimizing it. 
+# BCGD(max_params=G.parameters(), min_params=D.parameters(), lr_max=lr, lr_min=lr, device=device)
 # ACGD: Adaptive learning rates CGD;
 for img in dataloader:
     d_real = D(img)
