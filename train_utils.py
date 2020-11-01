@@ -9,7 +9,8 @@ from torchvision.datasets import CIFAR10, MNIST, LSUN, ImageFolder
 from GANs import dc_G, dc_D, \
     GoodGenerator, GoodDiscriminator, GoodDiscriminatorbn, GoodDiscriminatord, \
     DC_generator, DC_discriminator, \
-    ResNet32Discriminator, ResNet32Generator, DC_discriminatorW, GoodSNDiscriminator
+    ResNet32Discriminator, ResNet32Generator, DC_discriminatorW, GoodSNDiscriminator, \
+    dcD32, dcG32, DCGAN_G, DCGAN_D
 
 
 mnist_tf = transforms.Compose([transforms.ToTensor(),
@@ -79,7 +80,7 @@ def get_diff(net, model_vec):
     return vom
 
 
-def get_model(model_name, z_dim):
+def get_model(model_name, z_dim, configs=None):
     if model_name == 'dc':
         D = GoodDiscriminator()
         G = GoodGenerator()
@@ -107,6 +108,19 @@ def get_model(model_name, z_dim):
     elif model_name == 'mnist':
         D = dc_D()
         G = dc_G(z_dim=z_dim)
+    elif model_name == 'dc32':
+        D =dcD32()
+        G =dcG32(z_dim=z_dim)
+    elif model_name == 'DCGANs':
+        D = DCGAN_D(insize=configs['image_size'],
+                    channel_num=configs['image_channel'],
+                    feature_num=configs['feature_num'],
+                    n_extra_layers=configs['n_extra_layers'])
+        G = DCGAN_G(outsize=configs['image_size'],
+                    z_dim=z_dim,
+                    nc=configs['image_channel'],
+                    feature_num=configs['feature_num'],
+                    n_extra_layers=configs['n_extra_layers'])
     else:
         print('No matching result of :')
     print(model_name)

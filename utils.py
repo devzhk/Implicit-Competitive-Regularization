@@ -23,6 +23,7 @@ def cgd_trainer():
     parser.add_argument('--tol', type=float, default=1e-10)
     parser.add_argument('--atol', type=float, default=1e-16)
     parser.add_argument('--startn', type=int, default=0)
+    parser.add_argument('--model_config', type=str, default=None)
     return parser
 
 
@@ -49,7 +50,7 @@ def train_seq_parser():
     parser.add_argument('--logdir', type=str, default='test')
     parser.add_argument('--gpu_num', type=int, default=1)
     parser.add_argument('--startn', type=int, default=0)
-
+    parser.add_argument('--model_config', type=str, default=None)
     return parser
 
 

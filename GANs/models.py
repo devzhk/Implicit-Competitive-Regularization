@@ -359,14 +359,14 @@ class dc_D(nn.Module):
     def __init__(self):
         super(dc_D, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=5, stride=1),
+            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=5, stride=1),  # 32x24x24
             nn.LeakyReLU(0.01),
             # nn.BatchNorm2d(32),
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, stride=1),
+            nn.MaxPool2d(2, 2),  # 32x12x12
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, stride=1), # 64x8x8
             nn.LeakyReLU(0.01),
             # nn.BatchNorm2d(64),
-            nn.MaxPool2d(2, 2)
+            nn.MaxPool2d(2, 2) # 64x4x4
         )
         self.fc = nn.Sequential(
             nn.Linear(1024, 1024),
@@ -393,7 +393,7 @@ class dc_G(nn.Module):
         )
         self.convt = nn.Sequential(
             nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2,
-                               padding=1),
+                               padding=1),  # 128x7x7 -> 64x14x14
             nn.ReLU(),
             nn.BatchNorm2d(64),
             nn.ConvTranspose2d(in_channels=64, out_channels=1, kernel_size=4, stride=2, padding=1),

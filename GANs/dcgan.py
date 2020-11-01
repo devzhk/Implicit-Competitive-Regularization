@@ -3,17 +3,20 @@ import torch.nn as nn
 
 
 class DCGAN_D(nn.Module):
-    def __init__(self, isize, nz, nc, ndf, n_extra_layers=0):
+    def __init__(self, insize=64, channel_num=3, feature_num=128, n_extra_layers=0):
         super(DCGAN_D, self).__init__()
-        assert isize % 16 == 0, "isize has to be a multiple of 16"
+        assert insize % 16 == 0, "input size has to be a multiple of 16"
 
         main = nn.Sequential()
-        # input is nc x isize x isize
-        main.add_module('initial:{0}-{1}:conv'.format(nc, ndf),
-                        nn.Conv2d(nc, ndf, 4, 2, 1, bias=False))
-        main.add_module('initial:{0}:relu'.format(ndf),
+        # input: channel_num x insize x insize
+        main.add_module('initial:{0}-{1}:conv'.format(channel_num, feature_num),
+                        nn.Conv2d(channel_num, feature_num,
+                                  4, 2, 1, bias=False))
+        main.add_module('initial:{0}:relu'.format(feature_num),
                         nn.LeakyReLU(0.2, inplace=True))
-        csize, cndf = isize / 2, ndf
+        # csize: current feature size of conv layer
+        # cndf: current feature channels of conv layer
+        csize, cndf = insize / 2, feature_num
 
         # Extra layers
         for t in range(n_extra_layers):
@@ -36,39 +39,42 @@ class DCGAN_D(nn.Module):
             cndf = cndf * 2
             csize = csize / 2
 
-        # state size. K x 4 x 4
+        # state size. cndf x 4 x 4 -> 1x1
         main.add_module('final:{0}-{1}:conv'.format(cndf, 1),
                         nn.Conv2d(cndf, 1, 4, 1, 0, bias=False))
         self.main = main
 
-    def forward(self, input):
-        output = self.main(input)
-        output = output.mean(0)
-        return output.view(1)
+    def forward(self, x):
+        output = self.main(x)
+        return output
 
 
 class DCGAN_G(nn.Module):
-    def __init__(self, isize, nz, nc, ngf, ngpu, n_extra_layers=0):
+    def __init__(self, outsize=64, z_dim=100, nc=3, feature_num=128, n_extra_layers=0):
+        '''
+        nc: output channel number
+        '''
         super(DCGAN_G, self).__init__()
-        self.ngpu = ngpu
-        assert isize % 16 == 0, "isize has to be a multiple of 16"
+        assert outsize % 16 == 0, "insize has to be a multiple of 16"
 
-        cngf, tisize = ngf // 2, 4
-        while tisize != isize:
+        cngf, target_size = feature_num // 2, 4
+        while target_size != outsize:
             cngf = cngf * 2
-            tisize = tisize * 2
+            target_size = target_size * 2
 
         main = nn.Sequential()
-        # input is Z, going into a convolution
-        main.add_module('initial:{0}-{1}:convt'.format(nz, cngf),
-                        nn.ConvTranspose2d(nz, cngf, 4, 1, 0, bias=False))
+        # latent variable is  z_dim x 1 x 1
+        # after initial convolution: cngf x 4 x 4
+        main.add_module('initial:{0}-{1}:convt'.format(z_dim, cngf),
+                        nn.ConvTranspose2d(z_dim, cngf, 4, 1, 0, bias=False))
         main.add_module('initial:{0}:batchnorm'.format(cngf),
                         nn.BatchNorm2d(cngf))
         main.add_module('initial:{0}:relu'.format(cngf),
                         nn.ReLU(True))
-
-        csize, cndf = 4, cngf
-        while csize < isize // 2:
+        # csize: current feature size
+        # cngf: current number of feature channel
+        csize= 4
+        while csize < outsize // 2:
             main.add_module('pyramid:{0}-{1}:convt'.format(cngf, cngf // 2),
                             nn.ConvTranspose2d(cngf, cngf // 2, 4, 2, 1, bias=False))
             main.add_module('pyramid:{0}:batchnorm'.format(cngf // 2),
@@ -93,6 +99,6 @@ class DCGAN_G(nn.Module):
                         nn.Tanh())
         self.main = main
 
-    def forward(self, input):
-        output = self.main(input)
+    def forward(self, x):
+        output = self.main(x)
         return output

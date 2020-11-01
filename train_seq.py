@@ -1,8 +1,7 @@
 import os
-import csv
+import yaml
 import time
-import matplotlib.pyplot as plt
-import numpy as np
+
 import torch
 import torch.nn as nn
 from torch.optim import SGD, Adam
@@ -209,13 +208,15 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
           lr_d=1e-4, lr_g=1e-4,
           startPoint=None, start_n=0,
           z_dim=128, batchsize=64,
-          loss_name='WGAN', model_name='dc', data_path='None',
+          loss_name='WGAN',
+          model_name='dc', model_config=None,
+          data_path='None',
           show_iter=100, logdir='test', dataname='cifar10',
           device='cpu', gpu_num=1, saturating=False):
-    dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
+    dataset = get_data(dataname=dataname, path=data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
-    D, G = get_model(model_name=model_name, z_dim=z_dim)
+    D, G = get_model(model_name=model_name, z_dim=z_dim, configs=model_config)
     D.apply(weights_init_d).to(device)
     G.apply(weights_init_g).to(device)
     from datetime import datetime
@@ -235,7 +236,7 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
         G = nn.DataParallel(G, list(range(gpu_num)))
     timer = time.time()
     count = 0
-    if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+    if 'DCGAN' in model_name:
         fixed_noise = torch.randn((64, z_dim, 1, 1), device=device)
     else:
         fixed_noise = torch.randn((64, z_dim), device=device)
@@ -245,7 +246,7 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
         for real_x in dataloader:
             real_x = real_x[0].to(device)
             d_real = D(real_x)
-            if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+            if 'DCGAN' in model_name:
                 z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
             else:
                 z = torch.randn((d_real.shape[0], z_dim), device=device)
@@ -258,7 +259,7 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
             d_optimizer.step()
 
             if not saturating:
-                if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+                if 'DCGAN' in model_name:
                     z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
                 else:
                     z = torch.randn((d_real.shape[0], z_dim), device=device)
@@ -300,6 +301,11 @@ if __name__ == '__main__':
     parser = train_seq_parser()
     config = vars(parser.parse_args())
     print(config)
+    model_args = None
+    if config['model_config'] is not None:
+        with open(config['model_config'], 'r') as configFile:
+            model_config = yaml.safe_load(configFile)
+        model_args = model_config['parameters']
     # chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
     # train_d(epoch_num=30, show_iter=500,
     #         logdir='select', loss_name='JSD',
@@ -328,6 +334,6 @@ if __name__ == '__main__':
           z_dim=config['z_dim'], batchsize=config['batchsize'],
           data_path=config['datapath'], dataname=config['dataset'],
           loss_name=config['loss_type'],
-          model_name=config['model'],
+          model_name=config['model'], model_config=model_args,
           device=device, gpu_num=config['gpu_num'],
           saturating=False)

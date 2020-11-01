@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 from torchvision.models.inception import inception_v3
 from GANs.models import GoodGenerator, DC_generator, dc_G
-from GANs import ResNet32Generator
+from GANs import ResNet32Generator, dcG32
 from utils import eval_parser
 from metrics.is_biggan import load_inception_net, torch_calculate_frechet_distance, \
     torch_cov, numpy_calculate_frechet_distance
@@ -154,6 +154,10 @@ if __name__ == '__main__':
         G = DC_generator(z_dim=z_dim)
     elif model == 'mnist':
         G = dc_G(z_dim=z_dim)
+    elif model == 'dc32':
+        G =dcG32(z_dim=z_dim)
+    else:
+        raise ValueError('No matching generator for %s' % model)
     G.to(device)
     G.eval()
     evalor = evalor(G=G, z_dim=z_dim,

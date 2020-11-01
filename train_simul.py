@@ -1,7 +1,6 @@
 import os
-import csv
 import time
-import math
+import yaml
 
 import torch
 import torch.nn as nn
@@ -143,16 +142,17 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
               z_dim=128, batchsize=64,
               tols={'tol':1e-10, 'atol':1e-16},
               l2_penalty=0.0, momentum=0.0,
-              loss_name='WGAN', model_name='dc', data_path='None',
+              loss_name='WGAN', model_name='dc',
+              model_config=None,
+              data_path='None',
               show_iter=100, logdir='test', dataname='cifar10',
               device='cpu', gpu_num=1, collect_info=False):
     lr_d = 0.01
     lr_g = 0.01
-
-    dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)
+    dataset = get_data(dataname=dataname, path=data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
-    D, G = get_model(model_name=model_name, z_dim=z_dim)
+    D, G = get_model(model_name=model_name, z_dim=z_dim, configs=model_config)
     D.apply(weights_init_d).to(device)
     G.apply(weights_init_g).to(device)
     from datetime import datetime
@@ -185,7 +185,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
         G = nn.DataParallel(G, list(range(gpu_num)))
     timer = time.time()
     count = 0
-    if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+    if 'DCGAN' in model_name:
         fixed_noise = torch.randn((64, z_dim, 1, 1), device=device)
     else:
         fixed_noise = torch.randn((64, z_dim), device=device)
@@ -195,7 +195,7 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
         for real_x in dataloader:
             real_x = real_x[0].to(device)
             d_real = D(real_x)
-            if model_name == 'DCGAN' or model_name == 'DCGAN-WBN':
+            if 'DCGAN' in model_name:
                 z = torch.randn((d_real.shape[0], z_dim, 1, 1), device=device)
             else:
                 z = torch.randn((d_real.shape[0], z_dim), device=device)
@@ -247,23 +247,15 @@ if __name__ == '__main__':
     parser = cgd_trainer()
     config = vars(parser.parse_args())
     print(config)
-    # chk_path = 'checkpoints/0.00000MNIST-0.0100/SGD-0.01000_9000.pth'
-    # generate_data(model_weight=chk_path, path='figs/select/Fixed_1000.pt', device=device)
-    # train_mnist(epoch_num=30, show_iter=500, logdir='select',
-    #             model_weight=chk_path, load_d=True, load_g=True,
-    #             compare_path=chk_path, info_time=100, run_select='figs/select/Fixed_1000.pt',
-    #             device=device)
+    # load model configuration parameters if any
+    model_args = None
+    if config['model_config'] is not None:
+        with open(config['model_config'], 'r') as configFile:
+            model_config = yaml.safe_load(configFile)
+        model_args = model_config['parameters']
 
     start_n = config['startn']
-    # chk_path = 'checkpoints/ACGD/ACGD-Resnet0.010_%d.pth' % start_n
-    # chk_path = 'checkpoints/ACGD/ACGD-dc0.010_%d.pth' % start_n
-    # test 132000 64, ACGD 45000 128
-    # chk_path = 'checkpoints/ACGD/ACGD-DCGAN0.010_%d.pth' % start_n
     chk_path = config['checkpoint']
-    # train_cgd(epoch_num=40, milestone=(25, 30, 35), show_iter=500, logdir='cifar',
-    #           dataname='CIFAR10', loss_name='WGAN', model_name='dc',
-    #           device=device, gpu_num=2, collect_info=True)
-
     lr_g = config['lr_g']
     lr_d = config['lr_d']
     milestones = {'0': (lr_g, lr_d)}
@@ -277,5 +269,6 @@ if __name__ == '__main__':
               l2_penalty=0.0, momentum=config['momentum'],
               data_path=config['datapath'], dataname=config['dataset'],
               loss_name=config['loss_type'],
-              model_name=config['model'], tols=tols,
+              model_name=config['model'], model_config=model_args,
+              tols=tols,
               device=device, gpu_num=config['gpu_num'], collect_info=False)
