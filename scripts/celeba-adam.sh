@@ -1,5 +1,5 @@
 #! /bin/bash
-CUDA_VISIBLE_DEVICES=2 python3 train_seq.py \
+CUDA_VISIBLE_DEVICES=1 python3 train_seq.py \
 --gpu_num 1 \
 --epoch_num 15 \
 --model DCGAN \
@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=2 python3 train_seq.py \
 --show_iter 500 \
 --logdir celeba-adam \
 --dataset CelebA \
---datapath celeba \
+--datapath /mnt/md1/visiondatasets/datas/celeba \
 --lr_d 2e-4 \
 --lr_g 2e-4 \
 --batchsize 128

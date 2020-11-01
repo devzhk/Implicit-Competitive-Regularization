@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=1 python3 train_simul.py \
 --show_iter 500 \
 --logdir mnist-ACGD \
 --dataset MNIST \
---datapath mnist \
+--datapath /mnt/md1/visiondatasets/datas/mnist \
 --lr_d 1e-4 \
 --lr_g 1e-4 \
 --batchsize 128
