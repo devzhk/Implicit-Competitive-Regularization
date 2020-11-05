@@ -19,6 +19,16 @@ print('random seed : %d' % seed)
 
 
 def train(config, tols, milestone, n=2, device='cpu'):
+    """
+    Train a model.
+
+    Args:
+        config: (todo): write your description
+        tols: (float): write your description
+        milestone: (list): write your description
+        n: (array): write your description
+        device: (todo): write your description
+    """
     lr_d = config['lr_d']
     lr_g = config['lr_g']
     optim_type = config['optimizer']
@@ -97,6 +107,15 @@ def train(config, tols, milestone, n=2, device='cpu'):
 
 
 def train_scg(config, tols, milestone, device='cpu'):
+    """
+    Train a model.
+
+    Args:
+        config: (todo): write your description
+        tols: (float): write your description
+        milestone: (str): write your description
+        device: (todo): write your description
+    """
     lr_d = config['lr_d']
     lr_g = config['lr_g']
     optim_type = config['optimizer']
@@ -151,6 +170,12 @@ def train_scg(config, tols, milestone, device='cpu'):
             else:
                 z = torch.randn((real_x.shape[0], z_dim), device=device)
             def closure(train_x):
+                """
+                : parametermine the loss : return :
+
+                Args:
+                    train_x: (int): write your description
+                """
                 train_x = train_x.to(device)
                 fake_x = G(z)
                 d_fake = D(fake_x)

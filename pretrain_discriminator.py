@@ -33,6 +33,14 @@ datasizes = {x: len(datasets[x]) for x in ['train', 'eval']}
 
 
 def train_cls(epoch_num, save_path, device='cpu'):
+    """
+    Training function.
+
+    Args:
+        epoch_num: (int): write your description
+        save_path: (str): write your description
+        device: (todo): write your description
+    """
     D = GoodDiscriminator()
     # for param in D.parameters():
     #     param.requires_grad = False

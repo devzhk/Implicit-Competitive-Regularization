@@ -31,6 +31,14 @@ NUM_SAMPLES = 50000
 
 
 def cal_inception_score(G, device, z_dim):
+    """
+    Calculate the proposal score.
+
+    Args:
+        G: (array): write your description
+        device: (todo): write your description
+        z_dim: (int): write your description
+    """
     all_samples = []
     samples = torch.randn(NUM_SAMPLES, z_dim)
     for i in range(0, NUM_SAMPLES, BATCH_SIZE):
@@ -48,6 +56,18 @@ class Evalor(object):
     def __init__(self, G, z_dim, dataset,
                  model_dir,
                  log_path, device):
+        """
+        Initialize the device.
+
+        Args:
+            self: (todo): write your description
+            G: (int): write your description
+            z_dim: (int): write your description
+            dataset: (todo): write your description
+            model_dir: (str): write your description
+            log_path: (str): write your description
+            device: (todo): write your description
+        """
         self.is_flag = False
         self.fid_flag = False
         self.log_path = log_path
@@ -59,6 +79,12 @@ class Evalor(object):
         self.init_writer()
 
     def init_writer(self):
+        """
+        Init csv file
+
+        Args:
+            self: (todo): write your description
+        """
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
         self.f = open(self.log_path + '%s_metrics.csv' % self.dataset, 'w')
@@ -69,11 +95,25 @@ class Evalor(object):
         self.writer.writeheader()
 
     def load_model(self, model_path):
+        """
+        Load the model from disk.
+
+        Args:
+            self: (str): write your description
+            model_path: (str): write your description
+        """
         print('loading model from %s' % model_path)
         chkpoint = torch.load(model_path)
         self.G.load_state_dict(chkpoint['G'])
 
     def get_metrics(self, count):
+        """
+        Get metrics.
+
+        Args:
+            self: (todo): write your description
+            count: (str): write your description
+        """
         print('===Iter %d===' % count)
         content = {'iter': count}
         if self.is_flag:
@@ -94,6 +134,18 @@ class Evalor(object):
         self.f.flush()
 
     def eval_metrics(self, begin, end, step, is_flag=True, fid_flag=False, dataname='CIFAR10'):
+        """
+        Evaluate the model
+
+        Args:
+            self: (todo): write your description
+            begin: (todo): write your description
+            end: (todo): write your description
+            step: (todo): write your description
+            is_flag: (bool): write your description
+            fid_flag: (str): write your description
+            dataname: (str): write your description
+        """
         print('%d ==> %d, step: %d' % (begin, end, step))
         self.is_flag = is_flag
         self.fid_flag = fid_flag

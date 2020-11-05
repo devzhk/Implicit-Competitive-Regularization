@@ -12,6 +12,14 @@ NUM_SAMPLES = 50000
 
 
 def cal_inception_score(G, device, z_dim):
+    """
+    Calculate the scoring scores.
+
+    Args:
+        G: (array): write your description
+        device: (todo): write your description
+        z_dim: (int): write your description
+    """
     all_samples = []
     samples = torch.randn(NUM_SAMPLES, z_dim)
     for i in range(0, NUM_SAMPLES, BATCH_SIZE):
@@ -26,6 +34,14 @@ def cal_inception_score(G, device, z_dim):
 
 
 def cal_inception_score_o(G, device, z_dim):
+    """
+    Calculate the falption scores.
+
+    Args:
+        G: (todo): write your description
+        device: (todo): write your description
+        z_dim: (int): write your description
+    """
     all_samples = []
     samples = torch.randn(NUM_SAMPLES, z_dim)
     for i in range(0, NUM_SAMPLES, BATCH_SIZE):
@@ -40,6 +56,14 @@ def cal_inception_score_o(G, device, z_dim):
 
 
 def cal_fid_score(G, device, z_dim):
+    """
+    Calculate fid score.
+
+    Args:
+        G: (array): write your description
+        device: (array): write your description
+        z_dim: (int): write your description
+    """
     stats_path = 'tflib/data/fid_stats_lsun_train.npz'
     inception_path = fid.check_or_download_inception('tflib/model')
     f = np.load(stats_path)

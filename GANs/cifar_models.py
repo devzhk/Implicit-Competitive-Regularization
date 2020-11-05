@@ -3,6 +3,12 @@ import torch.nn as nn
 
 class dcD32(nn.Module):
     def __init__(self):
+        """
+        Initialize the convolutional layer.
+
+        Args:
+            self: (todo): write your description
+        """
         super(dcD32, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=32, kernel_size=5, stride=1),  # 3x32x32 -> 32x28x28
@@ -19,6 +25,13 @@ class dcD32(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Forward computation
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.conv(x)
         x = x.view(x.shape[0], -1)
         return self.fc(x)
@@ -26,6 +39,13 @@ class dcD32(nn.Module):
 
 class dcG32(nn.Module):
     def __init__(self, z_dim=128):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            z_dim: (int): write your description
+        """
         super(dcG32, self).__init__()
         self.fc = nn.Sequential(
             nn.Linear(z_dim, 1024),
@@ -44,6 +64,13 @@ class dcG32(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.fc(x)
         x = x.view(x.shape[0], 128, 8, 8)
         return self.convt(x)

@@ -2,6 +2,11 @@ from argparse import ArgumentParser
 
 
 def cgd_trainer():
+    """
+    Cgd parser
+
+    Args:
+    """
     usage = 'Parser for CGD training'
     parser = ArgumentParser(description=usage)
     parser.add_argument('--dataset', type=str, default='CIFAR10')
@@ -28,6 +33,11 @@ def cgd_trainer():
 
 
 def train_seq_parser():
+    """
+    Train an argparse.
+
+    Args:
+    """
     usage = 'Parser for sequential training'
     parser = ArgumentParser(description=usage)
     parser.add_argument('--dataset', type=str, default='CIFAR10')
@@ -55,6 +65,11 @@ def train_seq_parser():
 
 
 def prepare_parser():
+    """
+    Prepare the argument parser.
+
+    Args:
+    """
     usage = 'Parser for training'
     parser = ArgumentParser(description=usage)
     parser.add_argument(
@@ -111,6 +126,11 @@ def prepare_parser():
 
 
 def eval_parser():
+    """
+    Parses the command line.
+
+    Args:
+    """
     usage = 'Parser for eval'
     parser = ArgumentParser(description=usage)
     parser.add_argument('--model', type=str)

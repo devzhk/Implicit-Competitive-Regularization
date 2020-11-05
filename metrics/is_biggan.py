@@ -14,6 +14,13 @@ from torchvision.models.inception import inception_v3
 # returning pool features and logits.
 class WrapInception(nn.Module):
     def __init__(self, net):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            net: (todo): write your description
+        """
         super(WrapInception, self).__init__()
         self.net = net
         self.mean = P(torch.tensor([0.485, 0.456, 0.406]).view(1, -1, 1, 1),
@@ -22,6 +29,13 @@ class WrapInception(nn.Module):
                      requires_grad=False)
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         # Normalize x
         x = (x + 1.) / 2.0
         x = (x - self.mean) / self.std
@@ -108,6 +122,14 @@ def torch_cov(m, rowvar=False):
 # Pytorch implementation of matrix sqrt, from Tsung-Yu Lin, and Subhransu Maji
 # https://github.com/msubhransu/matrix-sqrt
 def sqrt_newton_schulz(A, numIters, dtype=None):
+    """
+    R create a newton.
+
+    Args:
+        A: (array): write your description
+        numIters: (int): write your description
+        dtype: (todo): write your description
+    """
     with torch.no_grad():
         if dtype is None:
             dtype = A.type()
@@ -217,6 +239,13 @@ def torch_calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
 
 
 def calculate_inception_score(pred, num_splits=10):
+    """
+    Calculate the mean scores.
+
+    Args:
+        pred: (todo): write your description
+        num_splits: (int): write your description
+    """
     scores = []
     for index in range(num_splits):
         pred_chunk = pred[index * (pred.shape[0] // num_splits): (index + 1) * (pred.shape[0] // num_splits), :]
@@ -230,6 +259,14 @@ def calculate_inception_score(pred, num_splits=10):
 # activations. Return the pool, the logits, and the labels (if one wants
 # Inception Accuracy the labels of the generated class will be needed)
 def accumulate_inception_activations(sample, net, num_inception_images=50000):
+    """
+    Accumulate the objective.
+
+    Args:
+        sample: (int): write your description
+        net: (str): write your description
+        num_inception_images: (int): write your description
+    """
     pool, logits, labels = [], [], []
     while (torch.cat(logits, 0).shape[0] if len(logits) else 0) < num_inception_images:
         with torch.no_grad():
@@ -243,6 +280,12 @@ def accumulate_inception_activations(sample, net, num_inception_images=50000):
 
 # Load and wrap the Inception model
 def load_inception_net(parallel=False):
+    """
+    Loads a net model from disk.
+
+    Args:
+        parallel: (str): write your description
+    """
     inception_model = inception_v3(pretrained=True, transform_input=False)
     inception_model = WrapInception(inception_model.eval()).cuda()
     if parallel:

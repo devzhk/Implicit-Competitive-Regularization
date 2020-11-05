@@ -30,6 +30,14 @@ INCEPTION_OUTPUT = 'logits'
 # Run images through Inception.
 inception_images = tf.compat.v1.placeholder(tf.float32, [None, 3, None, None], name = 'inception_images')
 def inception_logits(images = inception_images, num_splits = 1):
+    """
+    Logits for tf.
+
+    Args:
+        images: (list): write your description
+        inception_images: (str): write your description
+        num_splits: (int): write your description
+    """
     images = tf.transpose(images, [0, 2, 3, 1])
     size = 299
     images = tf.compat.v1.image.resize_bilinear(images, [size, size])
@@ -49,6 +57,12 @@ logits=inception_logits()
 
 
 def get_inception_probs(inps):
+    """
+    Compute the accuracy of the predictions.
+
+    Args:
+        inps: (str): write your description
+    """
     session=tf.get_default_session()
     n_batches = int(np.ceil(float(inps.shape[0]) / BATCH_SIZE))
     preds = np.zeros([inps.shape[0], 1000], dtype = np.float32)
@@ -60,6 +74,13 @@ def get_inception_probs(inps):
 
 
 def preds2score(preds, splits=10):
+    """
+    Compute the mean and variance
+
+    Args:
+        preds: (todo): write your description
+        splits: (todo): write your description
+    """
     scores = []
     for i in range(splits):
         part = preds[(i * preds.shape[0] // splits):((i + 1) * preds.shape[0] // splits), :]
@@ -70,6 +91,13 @@ def preds2score(preds, splits=10):
 
 
 def get_inception_score(images, splits=10):
+    """
+    Get the mean and standard deviation
+
+    Args:
+        images: (todo): write your description
+        splits: (todo): write your description
+    """
     assert(type(images) == np.ndarray)
     assert(len(images.shape) == 4)
     assert(images.shape[1] == 3)

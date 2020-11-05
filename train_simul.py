@@ -27,6 +27,21 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
                 model_weight=None, load_d=False, load_g=False,
                 compare_path=None, info_time=100, run_select=None,
                 device='cpu'):
+    """
+    Train the model
+
+    Args:
+        epoch_num: (int): write your description
+        show_iter: (int): write your description
+        logdir: (str): write your description
+        model_weight: (todo): write your description
+        load_d: (todo): write your description
+        load_g: (todo): write your description
+        compare_path: (str): write your description
+        info_time: (todo): write your description
+        run_select: (int): write your description
+        device: (todo): write your description
+    """
     lr_d = 0.01
     lr_g = 0.01
     batchsize = 128
@@ -147,6 +162,31 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
               data_path='None',
               show_iter=100, logdir='test', dataname='cifar10',
               device='cpu', gpu_num=1, collect_info=False):
+    """
+    Training function.
+
+    Args:
+        epoch_num: (int): write your description
+        milestone: (str): write your description
+        optim_type: (str): write your description
+        startPoint: (todo): write your description
+        start_n: (todo): write your description
+        z_dim: (int): write your description
+        batchsize: (int): write your description
+        tols: (float): write your description
+        l2_penalty: (todo): write your description
+        momentum: (todo): write your description
+        loss_name: (str): write your description
+        model_name: (str): write your description
+        model_config: (todo): write your description
+        data_path: (str): write your description
+        show_iter: (int): write your description
+        logdir: (str): write your description
+        dataname: (str): write your description
+        device: (todo): write your description
+        gpu_num: (int): write your description
+        collect_info: (todo): write your description
+    """
     lr_d = 0.01
     lr_g = 0.01
     dataset = get_data(dataname=dataname, path=data_path)

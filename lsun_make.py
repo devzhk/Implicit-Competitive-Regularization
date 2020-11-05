@@ -12,6 +12,12 @@ __license__ = 'MIT'
 
 
 def view(db_path):
+    """
+    Display a window
+
+    Args:
+        db_path: (str): write your description
+    """
     print('Viewing', db_path)
     print('Press ESC to exist or SPACE to advance.')
     window_name = 'LSUN'
@@ -31,6 +37,15 @@ def view(db_path):
 
 
 def export_images(db_path, out_dir, flat=False, limit=-1):
+    """
+    Export images from database.
+
+    Args:
+        db_path: (str): write your description
+        out_dir: (str): write your description
+        flat: (str): write your description
+        limit: (int): write your description
+    """
     print('Exporting', db_path, 'to', out_dir)
     env = lmdb.open(db_path, map_size=1099511627776,
                     max_readers=100, readonly=True)
@@ -55,6 +70,11 @@ def export_images(db_path, out_dir, flat=False, limit=-1):
 
 
 def main():
+    """
+    Main function.
+
+    Args:
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('command', nargs='?', type=str,
                         choices=['view', 'export'],

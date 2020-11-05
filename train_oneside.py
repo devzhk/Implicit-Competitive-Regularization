@@ -29,6 +29,25 @@ def train_ocgd(epoch_num=10, optim_type='BCGD2',
                loss_name='WGAN', model_name='dc',
                data_path='None', dataname='cifar10',
                device='cpu', gpu_num=1, collect_info=False):
+    """
+    Train an epoch.
+
+    Args:
+        epoch_num: (int): write your description
+        optim_type: (str): write your description
+        startPoint: (todo): write your description
+        logdir: (str): write your description
+        update_min: (float): write your description
+        z_dim: (int): write your description
+        batchsize: (int): write your description
+        loss_name: (str): write your description
+        model_name: (str): write your description
+        data_path: (str): write your description
+        dataname: (str): write your description
+        device: (todo): write your description
+        gpu_num: (int): write your description
+        collect_info: (todo): write your description
+    """
     lr_d = 0.01
     lr_g = 0.01
     dataset = get_data(dataname=dataname, path='../datas/%s' % data_path)

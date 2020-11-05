@@ -4,6 +4,16 @@ import torch.nn as nn
 
 class DCGAN_D(nn.Module):
     def __init__(self, insize=64, channel_num=3, feature_num=128, n_extra_layers=0):
+        """
+        Initialize the module.
+
+        Args:
+            self: (todo): write your description
+            insize: (int): write your description
+            channel_num: (int): write your description
+            feature_num: (int): write your description
+            n_extra_layers: (list): write your description
+        """
         super(DCGAN_D, self).__init__()
         assert insize % 16 == 0, "input size has to be a multiple of 16"
 
@@ -45,6 +55,13 @@ class DCGAN_D(nn.Module):
         self.main = main
 
     def forward(self, x):
+        """
+        Eval on x.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         output = self.main(x)
         return output
 
@@ -100,5 +117,12 @@ class DCGAN_G(nn.Module):
         self.main = main
 
     def forward(self, x):
+        """
+        Eval on x.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         output = self.main(x)
         return output

@@ -12,6 +12,23 @@ class OCGD(object):
                  eps=1e-5, beta=0.99,
                  device=torch.device('cpu'),
                  udpate_min=False, collect_info=True):
+        """
+        Implements.
+
+        Args:
+            self: (todo): write your description
+            max_params: (int): write your description
+            min_params: (dict): write your description
+            lr_max: (float): write your description
+            lr_min: (float): write your description
+            eps: (float): write your description
+            beta: (float): write your description
+            device: (todo): write your description
+            torch: (todo): write your description
+            device: (todo): write your description
+            udpate_min: (str): write your description
+            collect_info: (todo): write your description
+        """
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
@@ -27,27 +44,67 @@ class OCGD(object):
         self.update_min = udpate_min
 
     def zero_grad(self):
+        """
+        Calculate the gradient
+
+        Args:
+            self: (todo): write your description
+        """
         zero_grad(self.max_params)
         zero_grad(self.min_params)
 
     def getinfo(self):
+        """
+        Returns the info about the server
+
+        Args:
+            self: (todo): write your description
+        """
         if self.info['grad_x'] is None:
             print('Warning! No update information stored. Set collect_info=True before call this method')
         return self.info
 
     def state_dict(self):
+        """
+        : return a dictionary with the state
+
+        Args:
+            self: (todo): write your description
+        """
         return self.state
 
     def load_state_dict(self, state_dict):
+        """
+        Loads the state from a dictionary.
+
+        Args:
+            self: (todo): write your description
+            state_dict: (dict): write your description
+        """
         self.state.update(state_dict)
         print('Load state: {}'.format(state_dict))
 
     def set_lr(self, lr_max, lr_min):
+        """
+        Sets the learning rate.
+
+        Args:
+            self: (todo): write your description
+            lr_max: (int): write your description
+            lr_min: (todo): write your description
+        """
         self.state.update({'lr_max': lr_max, 'lr_min': lr_min})
         print('Maximizing side learning rate: {:.4f}\n '
               'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
 
     def step(self, loss):
+        """
+        Perform a single optimization step.
+
+        Args:
+            self: (todo): write your description
+            loss: (todo): write your description
+        """
         lr_max = self.state['lr_max']
         lr_min = self.state['lr_min']
         beta = self.state['beta']

@@ -176,6 +176,12 @@ def gd_solver(grad_x, grad_y,
 
 
 def zero_grad(params):
+    """
+    Detach gradients from all gradients.
+
+    Args:
+        params: (dict): write your description
+    """
     for p in params:
         if p.grad is not None:
             p.grad.detach()

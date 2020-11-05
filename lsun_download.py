@@ -11,12 +11,25 @@ __license__ = 'MIT'
 
 
 def list_categories():
+    """
+    Returns a list of categories.
+
+    Args:
+    """
     url = 'http://dl.yf.io/lsun/categories.txt'
     with urlopen(Request(url)) as response:
         return response.read().decode().strip().split('\n')
 
 
 def download(out_dir, category, set_name):
+    """
+    Downloads a file.
+
+    Args:
+        out_dir: (str): write your description
+        category: (str): write your description
+        set_name: (str): write your description
+    """
     url = 'http://dl.yf.io/lsun/scenes/{category}_' \
           '{set_name}_lmdb.zip'.format(**locals())
     if set_name == 'test':
@@ -31,6 +44,11 @@ def download(out_dir, category, set_name):
 
 
 def main():
+    """
+    Entry point.
+
+    Args:
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', '--out_dir', default='')
     parser.add_argument('-c', '--category', default=None)
