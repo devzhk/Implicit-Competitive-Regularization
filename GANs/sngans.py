@@ -6,6 +6,12 @@ DIM = 64
 
 class GoodSNDiscriminator(nn.Module):
     def __init__(self):
+        """
+        Initialize the convolutional layer.
+
+        Args:
+            self: (todo): write your description
+        """
         super(GoodSNDiscriminator, self).__init__()
         self.main_module = nn.Sequential(
             SNConv2d(3, DIM, kernel_size=4, stride=2, padding=1),
@@ -30,6 +36,13 @@ class GoodSNDiscriminator(nn.Module):
         self.linear = SNLinear(4 * 4 * 4 * DIM, 1)
 
     def forward(self, input):
+        """
+        Transforms forward computation
+
+        Args:
+            self: (todo): write your description
+            input: (todo): write your description
+        """
         output = self.main_module(input)
         output = output.view(-1, 4 * 4 * 4 * DIM)
         # print(output.shape)

@@ -29,6 +29,18 @@ class Adam(Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0, amsgrad=False):
+        """
+        Initialize the gradient.
+
+        Args:
+            self: (todo): write your description
+            params: (dict): write your description
+            lr: (float): write your description
+            betas: (float): write your description
+            eps: (float): write your description
+            weight_decay: (float): write your description
+            amsgrad: (str): write your description
+        """
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -42,6 +54,13 @@ class Adam(Optimizer):
         super(Adam, self).__init__(params, defaults)
 
     def __setstate__(self, state):
+        """
+        Sets the state of this group.
+
+        Args:
+            self: (todo): write your description
+            state: (dict): write your description
+        """
         super(Adam, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('amsgrad', False)
@@ -142,6 +161,18 @@ class RAdam(Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0, amsgrad=False):
+        """
+        Initialize the gradient.
+
+        Args:
+            self: (todo): write your description
+            params: (dict): write your description
+            lr: (float): write your description
+            betas: (float): write your description
+            eps: (float): write your description
+            weight_decay: (float): write your description
+            amsgrad: (str): write your description
+        """
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -155,6 +186,13 @@ class RAdam(Optimizer):
         super(Adam, self).__init__(params, defaults)
 
     def __setstate__(self, state):
+        """
+        Sets the state of this group.
+
+        Args:
+            self: (todo): write your description
+            state: (dict): write your description
+        """
         super(Adam, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('amsgrad', False)

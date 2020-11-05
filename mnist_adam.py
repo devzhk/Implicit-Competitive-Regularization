@@ -25,21 +25,45 @@ print('random seed : %d' % seed)
 
 
 def transform(x):
+    """
+    Transform x into a tensor.
+
+    Args:
+        x: (array): write your description
+    """
     x = transforms.ToTensor()(x)
     return (x - 0.5) / 0.5
 
 
 def detransform(x):
+    """
+    Detransformformform ( x )
+
+    Args:
+        x: (array): write your description
+    """
     return (x + 1.0) / 2.0
 
 
 def weights_init_d(m):
+    """
+    Initialize weight weights.
+
+    Args:
+        m: (array): write your description
+    """
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.005)
 
 
 def weights_init_g(m):
+    """
+    Initialize weights.
+
+    Args:
+        m: (array): write your description
+    """
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.005)
@@ -52,6 +76,27 @@ class VisionData():
                  weight_decay=0.0,
                  d_penalty=0.0, g_penalty=0.0,
                  noise_shape=(64, 8), gp_weight=10, gpu_num=1):
+        """
+        Initialize the device.
+
+        Args:
+            self: (todo): write your description
+            D: (int): write your description
+            G: (int): write your description
+            device: (todo): write your description
+            dataset: (todo): write your description
+            z_dim: (int): write your description
+            batchsize: (int): write your description
+            lr_d: (float): write your description
+            lr_g: (todo): write your description
+            show_iter: (bool): write your description
+            weight_decay: (float): write your description
+            d_penalty: (str): write your description
+            g_penalty: (str): write your description
+            noise_shape: (str): write your description
+            gp_weight: (int): write your description
+            gpu_num: (int): write your description
+        """
         self.lr_d = lr_d
         self.lr_g = lr_g
         self.batchsize = batchsize
@@ -85,15 +130,33 @@ class VisionData():
         self.fixed_noise = torch.randn(noise_shape, device=device)
 
     def ini_weight(self):
+        """
+        Apply weighting weights.
+
+        Args:
+            self: (todo): write your description
+        """
         self.D.apply(weights_init_d)
         self.G.apply(weights_init_g)
 
     def generate_data(self):
+        """
+        Generate data from the data.
+
+        Args:
+            self: (todo): write your description
+        """
         z = torch.randn((self.batchsize, self.z_dim), device=self.device)
         data = self.G(z)
         return data
 
     def l2penalty(self):
+        """
+        Compute the diagonal of the kernel.
+
+        Args:
+            self: (todo): write your description
+        """
         p_d = 0
         p_g = 0
         if self.d_penalty != 0:
@@ -105,6 +168,16 @@ class VisionData():
         return self.d_penalty * p_d - self.g_penalty * p_g
 
     def load_checkpoint(self, chkpt_path, count, load_d=False, load_g=False):
+        """
+        Load checkpoint
+
+        Args:
+            self: (todo): write your description
+            chkpt_path: (str): write your description
+            count: (int): write your description
+            load_d: (str): write your description
+            load_g: (str): write your description
+        """
         self.count = count
         checkpoint = torch.load(chkpt_path)
         if load_d:
@@ -117,6 +190,16 @@ class VisionData():
 
     def save_checkpoint(self, path, dataset,
                         d_optim=None, g_optim=None):
+        """
+        Save checkpoint to disk to disk.
+
+        Args:
+            self: (todo): write your description
+            path: (str): write your description
+            dataset: (todo): write your description
+            d_optim: (todo): write your description
+            g_optim: (todo): write your description
+        """
         chk_name = './checkpoints/%.5f%s-%.4f/' % (self.d_penalty, dataset, self.lr_d)
         if not os.path.exists(chk_name):
             os.makedirs(chk_name)
@@ -148,12 +231,30 @@ class VisionData():
         print('save models at %s' % chk_name + path)
 
     def writer_init(self, logname, comments):
+        """
+        Initialize writer writer.
+
+        Args:
+            self: (todo): write your description
+            logname: (str): write your description
+            comments: (str): write your description
+        """
         from datetime import datetime
         current_time = datetime.now().strftime('%b%d_%H-%M-%S')
         path = ('logs/%s/' % logname) + current_time + '_' + comments
         self.writer = SummaryWriter(log_dir=path)
 
     def show_info(self, timer, logdir, D_loss=None, G_loss=None):
+        """
+        Show image info
+
+        Args:
+            self: (todo): write your description
+            timer: (todo): write your description
+            logdir: (str): write your description
+            D_loss: (dict): write your description
+            G_loss: (dict): write your description
+        """
         if G_loss is not None:
             print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
                 self.count, D_loss.item(), G_loss.item(), timer))
@@ -174,6 +275,15 @@ class VisionData():
             print('Fail to plot: save images to %s' % path)
 
     def print_info(self, timer, D_loss=None, G_loss=None):
+        """
+        Print image info
+
+        Args:
+            self: (todo): write your description
+            timer: (todo): write your description
+            D_loss: (dict): write your description
+            G_loss: (dict): write your description
+        """
         if G_loss is not None:
             print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
                 self.count, D_loss.item(), G_loss.item(), timer))
@@ -184,6 +294,14 @@ class VisionData():
         vutils.save_image(fake_data, 'figs/cifar10/iter-%d.png' % self.count)
 
     def plot_d(self, d_real, d_fake):
+        """
+        Plot d_real
+
+        Args:
+            self: (todo): write your description
+            d_real: (array): write your description
+            d_fake: (array): write your description
+        """
         self.writer.add_scalars('Discriminator output',
                                 {'real': d_real.mean().item(), 'fake': d_fake.mean().item()},
                                 self.count)
@@ -191,6 +309,17 @@ class VisionData():
     def plot_optim(self, d_steps=None, d_updates=None,
                    g_steps=None, g_updates=None,
                    his=False):
+        """
+        Plot the optimizer.
+
+        Args:
+            self: (todo): write your description
+            d_steps: (int): write your description
+            d_updates: (todo): write your description
+            g_steps: (float): write your description
+            g_updates: (todo): write your description
+            his: (todo): write your description
+        """
 
         if d_steps is not None and d_updates is not None:
             ds_norm = torch.norm(d_steps, p=2)
@@ -211,6 +340,18 @@ class VisionData():
                 self.writer.add_histogram('Update/Generator', g_updates, global_step=self.count)
 
     def plot_grad(self, gd, gg, hd=None, hg=None, cg_d=None, cg_g=None):
+        """
+        Plot gradient plot.
+
+        Args:
+            self: (todo): write your description
+            gd: (dict): write your description
+            gg: (dict): write your description
+            hd: (dict): write your description
+            hg: (dict): write your description
+            cg_d: (dict): write your description
+            cg_g: (dict): write your description
+        """
         self.writer.add_scalars('Delta', {'D gradient': gd.item(), 'G gradient': gg.item()},
                                 self.count)
         if hd is not None and hg is not None:
@@ -221,6 +362,15 @@ class VisionData():
                                     self.count)
 
     def plot_param(self, D_loss=None, G_loss=None, total_loss=None):
+        """
+        Plot the loss function
+
+        Args:
+            self: (todo): write your description
+            D_loss: (dict): write your description
+            G_loss: (dict): write your description
+            total_loss: (dict): write your description
+        """
         if D_loss is not None:
             self.writer.add_scalars('Loss', {'D_loss': D_loss.item()}, self.count)
         if G_loss is not None:
@@ -237,6 +387,15 @@ class VisionData():
         self.writer.add_scalars('weight', {'D params': wd.item(), 'G params': wg.item()}, self.count)
 
     def plot_proj(self, epoch, loss, model_vec):
+        """
+        Plots the sum of the given epoch.
+
+        Args:
+            self: (todo): write your description
+            epoch: (int): write your description
+            loss: (todo): write your description
+            model_vec: (todo): write your description
+        """
         current_model = torch.cat([p.contiguous().view(-1) for p in self.D.parameters()]).detach()
         weight_vec = model_vec - current_model
         model_vec /= torch.norm(weight_vec, p=2)
@@ -271,6 +430,13 @@ class VisionData():
                                            'cgd': cos_cgd}, global_step=epoch)
 
     def plot_diff(self, model_vec):
+        """
+        Plots the difference between the model_vec
+
+        Args:
+            self: (todo): write your description
+            model_vec: (todo): write your description
+        """
         current_model = torch.cat([p.contiguous().view(-1) for p in self.D.parameters()]).detach()
         weight_vec = current_model - model_vec
         vom = torch.norm(weight_vec, p=2)
@@ -281,6 +447,21 @@ class VisionData():
                  loss_type='JSD', his_flag=False,
                  info_time=100, compare_weight=None,
                  optim_state=None):
+        """
+        Train the gpu epoch.
+
+        Args:
+            self: (todo): write your description
+            epoch_num: (int): write your description
+            mode: (todo): write your description
+            dataname: (str): write your description
+            logname: (str): write your description
+            loss_type: (str): write your description
+            his_flag: (bool): write your description
+            info_time: (todo): write your description
+            compare_weight: (bool): write your description
+            optim_state: (todo): write your description
+        """
         if compare_weight is not None:
             discriminator = dc_D().to(self.device)
             model_weight = torch.load(compare_weight)
@@ -365,6 +546,19 @@ class VisionData():
     def train_sgd(self, epoch_num, mode='Adam',
                  dataname='MNIST', logname='MNIST',
                  loss_type='JSD', compare_weight=None, info_time=100):
+        """
+        Training function.
+
+        Args:
+            self: (todo): write your description
+            epoch_num: (int): write your description
+            mode: (todo): write your description
+            dataname: (str): write your description
+            logname: (str): write your description
+            loss_type: (str): write your description
+            compare_weight: (bool): write your description
+            info_time: (todo): write your description
+        """
         if compare_weight is not None:
             discriminator = dc_D().to(self.device)
             model_weight = torch.load(compare_weight)
@@ -429,6 +623,19 @@ class VisionData():
                     dataname='MNIST', logname='MNIST',
                     overtrain_path=None, compare_weight=None,
                     info_time=100):
+        """
+        Train the epoch.
+
+        Args:
+            self: (todo): write your description
+            epoch_num: (int): write your description
+            mode: (todo): write your description
+            dataname: (str): write your description
+            logname: (str): write your description
+            overtrain_path: (str): write your description
+            compare_weight: (bool): write your description
+            info_time: (todo): write your description
+        """
         path = None
         if overtrain_path is not None:
             path = overtrain_path
@@ -515,6 +722,21 @@ class VisionData():
                 overtrain_path=None, compare_weight=None,
                 his_flag=False, info_time=100,
                 optim_state=None):
+        """
+        Train the model.
+
+        Args:
+            self: (todo): write your description
+            epoch_num: (int): write your description
+            mode: (str): write your description
+            dataname: (str): write your description
+            logname: (str): write your description
+            overtrain_path: (str): write your description
+            compare_weight: (bool): write your description
+            his_flag: (todo): write your description
+            info_time: (todo): write your description
+            optim_state: (todo): write your description
+        """
         path = None
         if overtrain_path is not None:
             path = overtrain_path
@@ -626,6 +848,21 @@ class VisionData():
                     compare_weight=None, loss_type='JSD',
                     his_flag=False, info_time=100,
                     optim_state=None):
+        """
+        Train the optimizer.
+
+        Args:
+            self: (todo): write your description
+            epoch_num: (int): write your description
+            mode: (todo): write your description
+            dataname: (str): write your description
+            logname: (str): write your description
+            compare_weight: (bool): write your description
+            loss_type: (str): write your description
+            his_flag: (bool): write your description
+            info_time: (todo): write your description
+            optim_state: (todo): write your description
+        """
         if compare_weight is not None:
             discriminator = dc_D().to(self.device)
             model_weight = torch.load(compare_weight)
@@ -710,6 +947,16 @@ class VisionData():
         self.writer.close()
 
     def traing(self, epoch_num, mode='Adam', dataname='MNIST', logname='MNIST'):
+        """
+        Traverse the optimization
+
+        Args:
+            self: (todo): write your description
+            epoch_num: (int): write your description
+            mode: (todo): write your description
+            dataname: (str): write your description
+            logname: (str): write your description
+        """
         print(mode)
         if mode == 'SGD':
             d_optimizer = optim.SGD(self.D.parameters(), lr=self.lr_d, weight_decay=self.weight_decay)
@@ -777,6 +1024,11 @@ class VisionData():
 
 
 def train_mnist():
+    """
+    Train the dataset
+
+    Args:
+    """
     modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -817,6 +1069,20 @@ def train_mnist():
 def trains(start, end, step, epoch_num,
            model_name, weight_prefix,
            dataname, data_path, preload_path=None):
+    """
+    Trains the device.
+
+    Args:
+        start: (todo): write your description
+        end: (int): write your description
+        step: (int): write your description
+        epoch_num: (int): write your description
+        model_name: (str): write your description
+        weight_prefix: (str): write your description
+        dataname: (str): write your description
+        data_path: (str): write your description
+        preload_path: (str): write your description
+    """
     import pandas as pd
     modes = ['lcgd', 'cgd', 'SGD', 'Adam', 'RMSProp']
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

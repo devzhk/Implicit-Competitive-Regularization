@@ -14,6 +14,21 @@ class ICR(object):
     def __init__(self, max_params, min_params,
                  lr=1e-3, momentum=0, alpha=1.0,
                  device=torch.device('cpu'), collect_info=True):
+        """
+        Initialize the device.
+
+        Args:
+            self: (todo): write your description
+            max_params: (int): write your description
+            min_params: (dict): write your description
+            lr: (float): write your description
+            momentum: (array): write your description
+            alpha: (float): write your description
+            device: (todo): write your description
+            torch: (todo): write your description
+            device: (todo): write your description
+            collect_info: (todo): write your description
+        """
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr': lr, 'momentum': momentum, 'alpha': alpha,
@@ -27,25 +42,64 @@ class ICR(object):
         self.collect_info = collect_info
 
     def zero_grad(self):
+        """
+        Calculate the gradient
+
+        Args:
+            self: (todo): write your description
+        """
         zero_grad(self.max_params)
         zero_grad(self.min_params)
 
     def state_dict(self):
+        """
+        : return a dictionary with the state
+
+        Args:
+            self: (todo): write your description
+        """
         return self.state
 
     def load_state_dict(self, state_dict):
+        """
+        Loads the state dictionary from a dictionary.
+
+        Args:
+            self: (todo): write your description
+            state_dict: (dict): write your description
+        """
         self.state.update(state_dict)
 
     def set_state(self, new_state):
+        """
+        Set the state of a new layer.
+
+        Args:
+            self: (todo): write your description
+            new_state: (int): write your description
+        """
         self.state.update(new_state)
         print('Current state: {}'.format(new_state))
 
     def get_info(self):
+        """
+        Get info about the server
+
+        Args:
+            self: (todo): write your description
+        """
         if self.info['grad_x'] is None:
             print('Warning! No update information stored. Set collect_info=True before call this method')
         return self.info
 
     def step(self, loss):
+        """
+        Perform a single optimization step.
+
+        Args:
+            self: (todo): write your description
+            loss: (todo): write your description
+        """
         lr = self.state['lr']
         alpha = self.state['alpha']
         time_step = self.state['step'] + 1
@@ -102,6 +156,19 @@ class testBCGD(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
                  device=torch.device('cpu')):
+        """
+        Initialize the device.
+
+        Args:
+            self: (todo): write your description
+            max_params: (int): write your description
+            min_params: (dict): write your description
+            lr_max: (float): write your description
+            lr_min: (float): write your description
+            device: (todo): write your description
+            torch: (todo): write your description
+            device: (todo): write your description
+        """
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.lr_max = lr_max
@@ -111,10 +178,23 @@ class testBCGD(object):
         self.state = {'old_g': None, 'old_d': None}
 
     def zero_grad(self):
+        """
+        Calculate the gradient
+
+        Args:
+            self: (todo): write your description
+        """
         zero_grad(self.max_params)
         zero_grad(self.min_params)
 
     def step(self, loss):
+        """
+        Perform one step.
+
+        Args:
+            self: (todo): write your description
+            loss: (todo): write your description
+        """
         g_param = torch.cat([p.contiguous().view(-1) for p in self.max_params])
         d_param = torch.cat([p.contiguous().view(-1) for p in self.min_params])
         grad_g = torch.tensor([2 * d_param[0].data, 2 * d_param[1].data,
@@ -164,6 +244,19 @@ class testLCGD(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
                  device=torch.device('cpu')):
+        """
+        Initialize the device.
+
+        Args:
+            self: (todo): write your description
+            max_params: (int): write your description
+            min_params: (dict): write your description
+            lr_max: (float): write your description
+            lr_min: (float): write your description
+            device: (todo): write your description
+            torch: (todo): write your description
+            device: (todo): write your description
+        """
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.lr_max = lr_max
@@ -171,10 +264,23 @@ class testLCGD(object):
         self.device = device
 
     def zero_grad(self):
+        """
+        Calculate the gradient
+
+        Args:
+            self: (todo): write your description
+        """
         zero_grad(self.max_params)
         zero_grad(self.min_params)
 
     def step(self, loss):
+        """
+        Perform one step.
+
+        Args:
+            self: (todo): write your description
+            loss: (todo): write your description
+        """
         g_param = torch.cat([p.contiguous().view(-1) for p in self.max_params])
         d_param = torch.cat([p.contiguous().view(-1) for p in self.min_params])
         grad_g = torch.tensor([2 * d_param[0].data, 2 * d_param[1].data,
@@ -236,10 +342,24 @@ def inverse(A, b, x=None, nsteps=10,
 
 
 def inverse_gt(A, b):
+    """
+    Inverse of the matrix b.
+
+    Args:
+        A: (int): write your description
+        b: (int): write your description
+    """
     return torch.matmul(torch.inverse(A), b), 0
 
 
 def plot_cg(tensorList, name):
+    """
+    Plot tensor of tensor.
+
+    Args:
+        tensorList: (list): write your description
+        name: (str): write your description
+    """
     array = []
     for p in tensorList:
         array.append(p.tolist())

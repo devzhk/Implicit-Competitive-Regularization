@@ -7,6 +7,18 @@ criterion = nn.BCEWithLogitsLoss()
 def get_loss(name, g_loss,
              d_real=None, d_fake=None,
              gp_weight=0, l2_weight=0, D=None):
+    """
+    Return loss. loss.
+
+    Args:
+        name: (str): write your description
+        g_loss: (todo): write your description
+        d_real: (todo): write your description
+        d_fake: (todo): write your description
+        gp_weight: (todo): write your description
+        l2_weight: (todo): write your description
+        D: (todo): write your description
+    """
     if name == 'WGAN':
         loss = - d_fake.mean() if g_loss else d_fake.mean() - d_real.mean()
     elif name == 'JSD':

@@ -28,6 +28,23 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
             model_weight=None, load_d=False, load_g=False,
             compare_path=None, info_time=100, run_select=None,
             device='cpu'):
+    """
+    Train the model.
+
+    Args:
+        epoch_num: (int): write your description
+        logdir: (str): write your description
+        optim: (todo): write your description
+        loss_name: (str): write your description
+        show_iter: (int): write your description
+        model_weight: (todo): write your description
+        load_d: (todo): write your description
+        load_g: (todo): write your description
+        compare_path: (str): write your description
+        info_time: (todo): write your description
+        run_select: (int): write your description
+        device: (todo): write your description
+    """
     lr_d = 0.001
     lr_g = 0.01
     batchsize = 128
@@ -145,6 +162,19 @@ def train_g(epoch_num=10, logdir='test',
             loss_name='JSD', show_iter=500,
             model_weight=None, load_d=False, load_g=False,
             device='cpu'):
+    """
+    Training function.
+
+    Args:
+        epoch_num: (int): write your description
+        logdir: (str): write your description
+        loss_name: (str): write your description
+        show_iter: (int): write your description
+        model_weight: (todo): write your description
+        load_d: (todo): write your description
+        load_g: (todo): write your description
+        device: (todo): write your description
+    """
     lr_d = 0.01
     lr_g = 0.01
     batchsize = 128
@@ -213,6 +243,30 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
           data_path='None',
           show_iter=100, logdir='test', dataname='cifar10',
           device='cpu', gpu_num=1, saturating=False):
+    """
+    Training function.
+
+    Args:
+        epoch_num: (int): write your description
+        milestone: (list): write your description
+        optim_type: (str): write your description
+        lr_d: (array): write your description
+        lr_g: (array): write your description
+        startPoint: (int): write your description
+        start_n: (todo): write your description
+        z_dim: (int): write your description
+        batchsize: (int): write your description
+        loss_name: (str): write your description
+        model_name: (str): write your description
+        model_config: (todo): write your description
+        data_path: (str): write your description
+        show_iter: (int): write your description
+        logdir: (str): write your description
+        dataname: (str): write your description
+        device: (todo): write your description
+        gpu_num: (int): write your description
+        saturating: (todo): write your description
+    """
     dataset = get_data(dataname=dataname, path=data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)

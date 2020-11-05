@@ -3,6 +3,16 @@ import torch.nn as nn
 
 class ResBlock(nn.Module):
     def __init__(self, num_filters, resample=None, batchnorm=True, inplace=False):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            num_filters: (int): write your description
+            resample: (int): write your description
+            batchnorm: (todo): write your description
+            inplace: (todo): write your description
+        """
         super(ResBlock, self).__init__()
 
         if resample == 'up':
@@ -32,6 +42,13 @@ class ResBlock(nn.Module):
         self.block = nn.Sequential(*self.block)
 
     def forward(self, x):
+        """
+        Forward function fortran.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         shortcut = x
         if not self.conv_shortcut is None:
             shortcut = self.conv_shortcut(x)
@@ -40,6 +57,15 @@ class ResBlock(nn.Module):
 
 class ResNet32Generator(nn.Module):
     def __init__(self, z_dim, num_filters=128, batchnorm=True):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            z_dim: (int): write your description
+            num_filters: (int): write your description
+            batchnorm: (todo): write your description
+        """
         super(ResNet32Generator, self).__init__()
         self.num_filters = num_filters
 
@@ -56,12 +82,28 @@ class ResNet32Generator(nn.Module):
         self.network = nn.Sequential(*self.network)
 
     def forward(self, z):
+        """
+        R forward forward computation.
+
+        Args:
+            self: (todo): write your description
+            z: (todo): write your description
+        """
         x = self.input(z).view(len(z), self.num_filters, 4, 4)
         return self.network(x)
 
 
 class ResNet32Discriminator(nn.Module):
     def __init__(self, n_in, num_filters=128, batchnorm=False):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            n_in: (int): write your description
+            num_filters: (int): write your description
+            batchnorm: (todo): write your description
+        """
         super(ResNet32Discriminator, self).__init__()
 
         self.block1 = nn.Sequential(nn.Conv2d(n_in, num_filters, 3, padding=1),
@@ -77,6 +119,13 @@ class ResNet32Discriminator(nn.Module):
         self.output = nn.Linear(num_filters, 1)
 
     def forward(self, x):
+        """
+        Calculate the network.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         y = self.block1(x)
         y = self.shortcut1(x) + y
         y = self.network(y).mean(-1).mean(-1)

@@ -18,6 +18,11 @@ from argparse import ArgumentParser
 
 
 def prepare_parser():
+    """
+    Prepare the argument parser.
+
+    Args:
+    """
     usage = 'Calculate and store inception metrics.'
     parser = ArgumentParser(description=usage)
     parser.add_argument(
@@ -49,6 +54,12 @@ def prepare_parser():
 
 
 def run(config):
+    """
+    Evaluates the model
+
+    Args:
+        config: (todo): write your description
+    """
     # Get loader
     config['drop_last'] = False
     loader = get_data(dataname=config['dataset'], path=config['data_path'])
@@ -83,6 +94,11 @@ def run(config):
 
 
 def main():
+    """
+    Main entry point.
+
+    Args:
+    """
     # parse command line
     parser = prepare_parser()
     config = vars(parser.parse_args())

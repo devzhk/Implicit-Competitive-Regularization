@@ -5,6 +5,16 @@ from torch.utils.data import DataLoader
 
 
 def generate(dataname, path, save_path, batch_size=64, device='cpu'):
+    """
+    Generate dataset.
+
+    Args:
+        dataname: (str): write your description
+        path: (str): write your description
+        save_path: (str): write your description
+        batch_size: (int): write your description
+        device: (str): write your description
+    """
     dataset = get_data(dataname=dataname, path='../datas/%s' % path)
     real_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True,
                              num_workers=4)
