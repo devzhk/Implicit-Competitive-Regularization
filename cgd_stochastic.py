@@ -170,6 +170,22 @@ def train_scg(config, tols, milestone, device='cpu'):
                     path = 'figs/%s_%s/' % (config['dataset'], logdir)
                     if not os.path.exists(path):
                         os.makedirs(path)
+                    is_flag = True
+                    if is_flag:
+                            inception_score = self.get_inception_score(batch_num=500)
+                            np.set_printoptions(precision=4)
+                            print('inception score mean: {}, std: {}'.format(inception_score[0], inception_score[1]))
+                            content.update({'is_mean': inception_score[0],
+                                            'is_std': inception_score[1]})
+                            self.writer.add_scalars('Inception scores', {'mean': inception_score[0]}, self.count)
+                        # if fid_flag:
+                        #     fid_score = cal_fid_score(G=self.G, device=self.device, z_dim=self.z_dim)
+                        #     np.set_printoptions(precision=4)
+                        #     print('FID score: {}'.format(fid_score))
+                        #     content.update({'FID score': fid_score})
+                        #     self.writer.add_scalars('FID scores', {'mean': fid_score}, self.count)
+                        self.iswriter.writerow(content)
+                        self.f.flush()
                     vutils.save_image(fake_img, path + 'iter_%d.png' % (count + start_n), normalize=True)
                 save_checkpoint(path=logdir,
                                 name='%s-%s%.3f_%d.pth' % (optim_type, model_name, lr_g, count + start_n),
