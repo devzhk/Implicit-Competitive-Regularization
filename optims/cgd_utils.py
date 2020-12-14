@@ -34,7 +34,7 @@ def conjugate_gradient(grad_x, grad_y,
 
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
-    residual_tol = tol * rdotr
+    residual_tol = tol * torch.dot(b, b)
     if rdotr < residual_tol or rdotr < atol:
         return x, 1
 
@@ -89,7 +89,7 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
 def general_conjugate_gradient(grad_x, grad_y,
                                x_params, y_params, b,
                                lr_x, lr_y, x=None, nsteps=None,
-                               tol=1e-12, atol=1e-20,
+                               tol=1e-10, atol=1e-16,
                                device=torch.device('cpu')):
     '''
 
@@ -110,14 +110,14 @@ def general_conjugate_gradient(grad_x, grad_y,
     lr_x = lr_x.sqrt()
     if x is None:
         x = torch.zeros(b.shape[0], device=device)
-        r = b.clone().detach()
+        r = b.clone()
     else:
         h1 = Hvp_vec(grad_vec=grad_x, params=y_params,
                      vec=lr_x * x, retain_graph=True).mul_(lr_y)
         h2 = Hvp_vec(grad_vec=grad_y, params=x_params,
                      vec=h1, retain_graph=True).mul_(lr_x)
         Avx = x + h2
-        r = b.clone().detach() - Avx
+        r = b.clone() - Avx
 
     if nsteps is None:
         nsteps = b.shape[0]
@@ -126,7 +126,8 @@ def general_conjugate_gradient(grad_x, grad_y,
         raise RuntimeError('CG: hessian vector product shape mismatch')
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
-    residual_tol = tol * rdotr
+    residual_tol = tol * torch.dot(b, b)
+    # residual_tol = tol * rdotr
     if rdotr < residual_tol or rdotr < atol:
         return x, 1
     for i in range(nsteps):
@@ -152,6 +153,8 @@ def general_conjugate_gradient(grad_x, grad_y,
         rdotr = new_rdotr
         if rdotr < residual_tol or rdotr < atol:
             break
+    if i > 100:
+        warnings.warn('CG iter num: %d' % (i + 1))
     return x, i + 1
 
 

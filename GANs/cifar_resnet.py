@@ -1,4 +1,5 @@
 import torch.nn as nn
+import math
 
 
 class ResBlock(nn.Module):
@@ -80,5 +81,50 @@ class ResNet32Discriminator(nn.Module):
         y = self.block1(x)
         y = self.shortcut1(x) + y
         y = self.network(y).mean(-1).mean(-1)
+        y = self.output(y)
+        return y
+
+
+class ResNetGenerator(nn.Module):
+    def __init__(self, z_dim, outsize, num_filters=128, batchnorm=True):
+        super(ResNetGenerator, self).__init__()
+        self.num_filters = num_filters
+        num_block = int(math.log(outsize // 4, 2))
+        self.input = nn.Linear(z_dim, 4 * 4 * num_filters)
+        self.network = [ResBlock(num_filters, resample='up', batchnorm=batchnorm, inplace=True)
+                        for i in range(num_block)]
+        if batchnorm:
+            self.network.append(nn.BatchNorm2d(num_filters))
+        self.network += [nn.ReLU(True),
+                         nn.Conv2d(num_filters, 3, 3, padding=1),
+                         nn.Tanh()]
+
+        self.network = nn.Sequential(*self.network)
+
+    def forward(self, z):
+        x = self.input(z).view(len(z), self.num_filters, 4, 4)
+        return self.network(x)
+
+
+class ResNetDiscriminator(nn.Module):
+    def __init__(self, in_channel, insize, num_filters=128, batchnorm=False):
+        super(ResNetDiscriminator, self).__init__()
+        self.num_filters = num_filters
+        num_block = int(math.log(insize // 4, 2))
+        self.block1 = nn.Sequential(nn.Conv2d(in_channel, num_filters, 3, padding=1),
+                                    nn.ReLU(inplace=True),
+                                    nn.Conv2d(num_filters, num_filters, 3, stride=2, padding=1))
+
+        self.shortcut1 = nn.Conv2d(in_channel, num_filters, 1, stride=2)
+        self.network = [ResBlock(num_filters, resample='down', batchnorm=batchnorm)
+                        for i in range(num_block)]
+        self.network.append(nn.ReLU(inplace=True))
+        self.network = nn.Sequential(*self.network)
+        self.output = nn.Linear(4 * num_filters, 1)
+
+    def forward(self, x):
+        y = self.block1(x)
+        y = self.shortcut1(x) + y
+        y = self.network(y).view(-1, self.num_filters * 4)
         y = self.output(y)
         return y

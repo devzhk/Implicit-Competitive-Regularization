@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter as P
-from torchvision.models.inception import inception_v3
-
+from .inception_pt import inception_v3
+# from torchvision.models import inception_v3
 
 # Pytorch FID and IS BigGAN's implementation
 # Module that wraps the inception network to enable use with dataparallel and
@@ -243,8 +243,11 @@ def accumulate_inception_activations(sample, net, num_inception_images=50000):
 
 # Load and wrap the Inception model
 def load_inception_net(parallel=False):
-    inception_model = inception_v3(pretrained=True, transform_input=False)
+    inception_model = inception_v3(pretrained=True,
+                                   model_dir='./',
+                                   transform_input=False)
     inception_model = WrapInception(inception_model.eval()).cuda()
+    print('Load inception-v3 pretrained model')
     if parallel:
         print('Parallelizing Inception module...')
         inception_model = nn.DataParallel(inception_model)

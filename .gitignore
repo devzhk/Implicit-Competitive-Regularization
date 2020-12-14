@@ -1,5 +1,5 @@
 tflib
-datas/
+.ipynb_checkpoints/
 logs/
 results/
 figs/
@@ -8,6 +8,7 @@ scripts/
 metrics/stats/
 eval_results/
 .idea/
+tests/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

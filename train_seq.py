@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.optim import SGD, Adam
 import torchvision.utils as vutils
 
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D
@@ -64,7 +64,7 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
         print('load fixed data set')
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
+    # writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
     if optim == 'SGD':
         d_optimizer = SGD(D.parameters(), lr=lr_d)
         print('Optimizer SGD')
@@ -93,7 +93,7 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
             tol_gloss += G_loss.item() * fake_x.shape[0]
             if compare_path is not None and count % info_time == 0:
                 diff = get_diff(net=D, model_vec=model_vec)
-                writer.add_scalar('Distance from checkpoint', diff.item(), global_step=count)
+                # writer.add_scalar('Distance from checkpoint', diff.item(), global_step=count)
                 if run_select is not None:
                     with torch.no_grad():
                         d_real_set = D(real_set)
@@ -102,11 +102,11 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
                         diff_fake = torch.norm(d_fake_set - fake_d, p=2)
                         d_vec = torch.cat([d_real_set, d_fake_set])
                         diff = torch.norm(d_vec.sub_(fixed_vec), p=2)
-                        writer.add_scalars('L2 norm of pred difference',
-                                           {'Total': diff.item(),
-                                            'real set': diff_real.item(),
-                                            'fake set': diff_fake.item()},
-                                           global_step=count)
+                        # writer.add_scalars('L2 norm of pred difference',
+                        #                    {'Total': diff.item(),
+                        #                     'real set': diff_real.item(),
+                        #                     'fake set': diff_fake.item()},
+                        #                    global_step=count)
             d_optimizer.zero_grad()
             if optim == 'SGD':
                 D_loss.backward()
@@ -120,15 +120,15 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
                 cgdInfo = d_optimizer.get_info()
                 gd = cgdInfo['grad_y']
                 gg = cgdInfo['grad_x']
-                writer.add_scalars('Grad', {'update': cgdInfo['update']}, global_step=count)
+                # writer.add_scalars('Grad', {'update': cgdInfo['update']}, global_step=count)
             tol_correct += (d_real > 0).sum().item() + (d_fake < 0).sum().item()
-            writer.add_scalars('Loss', {'D_loss': D_loss.item(),
-                                        'G_loss': G_loss.item()}, global_step=count)
-            writer.add_scalars('Grad', {'D grad': gd,
-                                        'G grad': gg}, global_step=count)
-            writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
-                                                        'Real image': d_real.mean().item()},
-                               global_step=count)
+            # writer.add_scalars('Loss', {'D_loss': D_loss.item(),
+            #                             'G_loss': G_loss.item()}, global_step=count)
+            # writer.add_scalars('Grad', {'D grad': gd,
+            #                             'G grad': gg}, global_step=count)
+            # writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
+            #                                             'Real image': d_real.mean().item()},
+            #                    global_step=count)
             if count % show_iter == 0:
                 time_cost = time.time() - timer
                 print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
@@ -138,7 +138,7 @@ def train_d(epoch_num=10, logdir='test', optim='SGD',
                                 name='FixG-%.3f_%d.pth' % (lr_d, count),
                                 D=D, G=G)
             count += 1
-    writer.close()
+    # writer.close()
 
 
 def train_g(epoch_num=10, logdir='test',
@@ -167,7 +167,7 @@ def train_g(epoch_num=10, logdir='test',
             print('Load G from %s' % model_weight)
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_g))
+    # writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_g))
     d_optimizer = SGD(D.parameters(), lr=lr_d)
     g_optimizer = SGD(G.parameters(), lr=lr_g)
     timer = time.time()
@@ -186,12 +186,12 @@ def train_g(epoch_num=10, logdir='test',
             G_loss.backward()
             g_optimizer.step()
             print('D_loss: {}, G_loss: {}'.format(D_loss.item(), G_loss.item()))
-            writer.add_scalars('Loss', {'D_loss': D_loss.item(),
-                                        'G_loss': G_loss.item()},
-                               global_step=count)
-            writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
-                                                        'Real image': d_real.mean().item()},
-                               global_step=count)
+            # writer.add_scalars('Loss', {'D_loss': D_loss.item(),
+            #                             'G_loss': G_loss.item()},
+            #                    global_step=count)
+            # writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
+            #                                             'Real image': d_real.mean().item()},
+            #                    global_step=count)
             if count % show_iter == 0:
                 time_cost = time.time() - timer
                 print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
@@ -201,10 +201,11 @@ def train_g(epoch_num=10, logdir='test',
                                 name='FixD-%.3f_%d.pth' % (lr_d, count),
                                 D=D, G=G)
             count += 1
-        writer.close()
+        # writer.close()
 
 
-def train(epoch_num=10, milestone=None, optim_type='Adam',
+def train(epoch_num=10, milestone=None,
+          optim_type='Adam', momentum=0.5,
           lr_d=1e-4, lr_g=1e-4,
           startPoint=None, start_n=0,
           z_dim=128, batchsize=64,
@@ -221,9 +222,9 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
     G.apply(weights_init_g).to(device)
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    writer = SummaryWriter(log_dir='logs/%s/%s' % (logdir, current_time))
-    d_optimizer = Adam(D.parameters(), lr=lr_d, betas=(0.5, 0.999))
-    g_optimizer = Adam(G.parameters(), lr=lr_g, betas=(0.5, 0.999))
+    # writer = SummaryWriter(log_dir='logs/%s/%s' % (logdir, current_time))
+    d_optimizer = Adam(D.parameters(), lr=lr_d, betas=(momentum, 0.99))
+    g_optimizer = Adam(G.parameters(), lr=lr_g, betas=(momentum, 0.99))
     if startPoint is not None:
         chk = torch.load(startPoint)
         D.load_state_dict(chk['D'])
@@ -272,11 +273,11 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
                 g_loss = d_loss
             g_optimizer.step()
 
-            writer.add_scalar('Loss/D loss', d_loss.item(), count)
-            writer.add_scalar('Loss/G loss', g_loss.item(), count)
-            writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
-                                                        'Real image': d_real.mean().item()},
-                               global_step=count)
+            # writer.add_scalar('Loss/D loss', d_loss.item(), count)
+            # writer.add_scalar('Loss/G loss', g_loss.item(), count)
+            # writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
+            #                                             'Real image': d_real.mean().item()},
+            #                    global_step=count)
             if count % show_iter == 0:
                 time_cost = time.time() - timer
                 print('Iter %d, D Loss: %.5f, G loss: %.5f, time: %.2f s'
@@ -292,7 +293,7 @@ def train(epoch_num=10, milestone=None, optim_type='Adam',
                                 name='%s-%s_%d.pth' % (optim_type, model_name, count + start_n),
                                 D=D, G=G, optimizer=d_optimizer, g_optimizer=g_optimizer)
             count += 1
-    writer.close()
+    # writer.close()
 
 
 if __name__ == '__main__':
@@ -325,7 +326,7 @@ if __name__ == '__main__':
     #         device=device)
 
     train(epoch_num=config['epoch_num'], milestone=[0, 0],
-          optim_type=config['optimizer'],
+          optim_type=config['optimizer'], momentum=config['momentum'],
           lr_d=config['lr_d'], lr_g=config['lr_g'],
           startPoint=config['checkpoint'],
           start_n=config['startn'],

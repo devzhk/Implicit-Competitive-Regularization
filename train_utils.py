@@ -10,7 +10,7 @@ from GANs import dc_G, dc_D, \
     GoodGenerator, GoodDiscriminator, GoodDiscriminatorbn, GoodDiscriminatord, \
     DC_generator, DC_discriminator, \
     ResNet32Discriminator, ResNet32Generator, DC_discriminatorW, GoodSNDiscriminator, \
-    dcD32, dcG32, DCGAN_G, DCGAN_D
+    dcD32, dcG32, DCGAN_G, DCGAN_D, ResNetDiscriminator, ResNetGenerator
 
 
 mnist_tf = transforms.Compose([transforms.ToTensor(),
@@ -93,9 +93,18 @@ def get_model(model_name, z_dim, configs=None):
     elif model_name == 'DCGAN':
         D = DC_discriminator()
         G = DC_generator(z_dim=z_dim)
-    elif model_name == 'Resnet':
+    elif model_name == 'Resnet32':
         D = ResNet32Discriminator(n_in=3, num_filters=128, batchnorm=True)
         G = ResNet32Generator(z_dim=z_dim, num_filters=128, batchnorm=True)
+    elif model_name == 'Resnet':
+        D = ResNetDiscriminator(in_channel=configs['image_channel'],
+                                insize=configs['image_size'],
+                                num_filters=configs['feature_num'],
+                                batchnorm=configs['batchnorm_d'])
+        G = ResNetGenerator(z_dim=z_dim,
+                            outsize=configs['image_size'],
+                            num_filters=configs['feature_num'],
+                            batchnorm=configs['batchnorm_g'])
     elif model_name == 'ResnetWBN':
         D = ResNet32Discriminator(n_in=3, num_filters=128, batchnorm=False)
         G = ResNet32Generator(z_dim=z_dim, num_filters=128, batchnorm=True)

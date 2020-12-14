@@ -16,4 +16,6 @@ CUDA_VISIBLE_DEVICES=1,2 python3 train_simul.py \
 --batchsize 128 \
 --tol 1e-8 \
 --atol 1e-12 \
---model_config scripts/configs/DCGAN.yaml
+--model_config scripts/configs/DCGAN.yaml \
+--startn 7500 \
+--checkpoint checkpoints/lsun-bedroom-DC256ACGD/ACGD-DCGANs0.010_7500.pth

@@ -72,8 +72,8 @@ class ACGD(object):
         sq_avg_y = self.state['sq_exp_avg_min']
         sq_avg_x = torch.zeros_like(grad_x_vec_d, requires_grad=False) if sq_avg_x is None else sq_avg_x
         sq_avg_y = torch.zeros_like(grad_y_vec_d, requires_grad=False) if sq_avg_y is None else sq_avg_y
-        sq_avg_x.mul_(beta).addcmul_(1 - beta, grad_x_vec_d, grad_x_vec_d)
-        sq_avg_y.mul_(beta).addcmul_(1 - beta, grad_y_vec_d, grad_y_vec_d)
+        sq_avg_x.mul_(beta).addcmul_(grad_x_vec_d, grad_x_vec_d, value=1 - beta)
+        sq_avg_y.mul_(beta).addcmul_(grad_y_vec_d, grad_y_vec_d, value=1 - beta)
 
         bias_correction = 1 - beta ** time_step
         lr_max = math.sqrt(bias_correction) * lr_max / sq_avg_x.sqrt().add(eps)
@@ -99,7 +99,9 @@ class ACGD(object):
                                                             x_params=self.min_params, y_params=self.max_params,
                                                             b=p_y, x=self.state['old_min'],
                                                             tol=tol, atol=atol,
-                                                            lr_x=lr_min, lr_y=lr_max, device=self.device)
+                                                            lr_x=lr_min, lr_y=lr_max,
+                                                            nsteps=1000,
+                                                            device=self.device)
             elif self.solver == 'gd':
                 cg_y, iter_num = gd_solver(grad_x=grad_y_vec, grad_y=grad_x_vec,
                                            x_params=self.min_params, y_params=self.max_params,
@@ -118,7 +120,9 @@ class ACGD(object):
                                                             x_params=self.max_params, y_params=self.min_params,
                                                             b=p_x, x=self.state['old_max'],
                                                             tol=tol, atol=atol,
-                                                            lr_x=lr_max, lr_y=lr_min, device=self.device)
+                                                            lr_x=lr_max, lr_y=lr_min,
+                                                            nsteps=1000,
+                                                            device=self.device)
             elif self.solver == 'gd':
                 cg_x, iter_num = gd_solver(grad_x=grad_x_vec, grad_y=grad_y_vec,
                                            x_params=self.max_params, y_params=self.min_params,

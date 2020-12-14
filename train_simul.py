@@ -7,7 +7,8 @@ import torch.nn as nn
 import torchvision.utils as vutils
 
 from torch.optim.sgd import SGD
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D
@@ -64,7 +65,7 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
 
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
+    # writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
     d_optimizer = SGD(D.parameters(), lr=lr_d)
     g_optimizer = SGD(G.parameters(), lr=lr_g)
     timer = time.time()
@@ -80,9 +81,9 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
             # update generator
             d_fake = D(fake_x)
 
-            writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
-                                                        'Real image': d_real.mean().item()},
-                               global_step=count)
+            # writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
+            #                                             'Real image': d_real.mean().item()},
+            #                    global_step=count)
             G_loss = get_loss(name='JSD', g_loss=True, d_fake=d_fake)
             g_optimizer.zero_grad()
             G_loss.backward()
@@ -94,7 +95,7 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
             D_loss = get_loss(name='JSD', g_loss=False, d_real=d_real, d_fake=d_fake_c)
             if compare_path is not None and count % info_time == 0:
                 diff = get_diff(net=D, model_vec=model_vec)
-                writer.add_scalar('Distance from checkpoint', diff.item(), global_step=count)
+                # writer.add_scalar('Distance from checkpoint', diff.item(), global_step=count)
                 if run_select is not None:
                     with torch.no_grad():
                         d_real_set = D(real_set)
@@ -103,11 +104,11 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
                         diff_fake = torch.norm(d_fake_set - fake_d, p=2)
                         d_vec = torch.cat([d_real_set, d_fake_set])
                         diff = torch.norm(d_vec.sub_(fixed_vec), p=2)
-                        writer.add_scalars('L2 norm of pred difference',
-                                           {'Total': diff.item(),
-                                            'real set': diff_real.item(),
-                                            'fake set': diff_fake.item()},
-                                           global_step=count)
+                        # writer.add_scalars('L2 norm of pred difference',
+                        #                    {'Total': diff.item(),
+                        #                     'real set': diff_real.item(),
+                        #                     'fake set': diff_fake.item()},
+                        #                    global_step=count)
             d_optimizer.zero_grad()
             D_loss.backward()
             d_optimizer.step()
@@ -115,10 +116,10 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
             gd = torch.norm(
                 torch.cat([p.grad.contiguous().view(-1) for p in D.parameters()]), p=2)
 
-            writer.add_scalars('Loss', {'D_loss': D_loss.item(),
-                                        'G_loss': G_loss.item()}, global_step=count)
-            writer.add_scalars('Grad', {'D grad': gd.item(),
-                                        'G grad': gg.item()}, global_step=count)
+            # writer.add_scalars('Loss', {'D_loss': D_loss.item(),
+            #                             'G_loss': G_loss.item()}, global_step=count)
+            # writer.add_scalars('Grad', {'D grad': gd.item(),
+            #                             'G grad': gg.item()}, global_step=count)
             if count % show_iter == 0:
                 time_cost = time.time() - timer
                 print('Iter :%d , D_loss: %.5f, G_loss: %.5f, time: %.3fs' % (
@@ -134,7 +135,7 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
                                 name='SGD-%.3f_%d.pth' % (lr_d, count),
                                 D=D, G=G)
             count += 1
-    writer.close()
+    # writer.close()
 
 
 def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
@@ -221,14 +222,17 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
                 save_checkpoint(path=logdir,
                                 name='%s-%s%.3f_%d.pth' % (optim_type, model_name, lr_g, count + start_n),
                                 D=D, G=G, optimizer=optimizer)
-            writer.add_scalars('Discriminator output', {'Generated image': d_fake.mean().item(),
-                                                        'Real image': d_real.mean().item()},
+            writer.add_scalars('Discriminator output',
+                               {'Generated image': d_fake.mean().item(),
+                                'Real image': d_real.mean().item()},
                                global_step=count)
             writer.add_scalar('Loss', loss.item(), global_step=count)
             if collect_info:
                 cgd_info = optimizer.get_info()
-                writer.add_scalar('Conjugate Gradient/iter num', cgd_info['iter_num'], global_step=count)
-                writer.add_scalar('Conjugate Gradient/running time', cgd_info['time'], global_step=count)
+                writer.add_scalar('Conjugate Gradient/iter num',
+                                  cgd_info['iter_num'], global_step=count)
+                writer.add_scalar('Conjugate Gradient/running time',
+                                  cgd_info['time'], global_step=count)
                 writer.add_scalars('Delta', {'D gradient': cgd_info['grad_y'],
                                              'G gradient': cgd_info['grad_x'],
                                              'D hvp': cgd_info['hvp_y'],
@@ -271,4 +275,4 @@ if __name__ == '__main__':
               loss_name=config['loss_type'],
               model_name=config['model'], model_config=model_args,
               tols=tols,
-              device=device, gpu_num=config['gpu_num'], collect_info=False)
+              device=device, gpu_num=config['gpu_num'], collect_info=True)

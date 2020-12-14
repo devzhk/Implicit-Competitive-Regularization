@@ -208,7 +208,7 @@ class BCGD(object):
 
         momentum = self.state['momentum']
         exp_avg_max, exp_avg_min = self.state['exp_avg_max'], self.state['exp_avg_min']
-        if momentum != 0:  # TODO test this code: not sure about exp_avg_* initial shape
+        if momentum != 0:
             bias_correction = 1 - momentum ** time_step
             lr_max /= bias_correction
             lr_min /= bias_correction

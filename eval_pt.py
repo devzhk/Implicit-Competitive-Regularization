@@ -25,6 +25,7 @@ class evalor():
         self.batchsize = batchsize
         self.model_dir = model_dir
         self.init_writer()
+        self.net = load_inception_net(parallel=False)
 
 
     def init_writer(self):
@@ -83,13 +84,13 @@ class evalor():
         return data
 
     def get_inception_score(self, batch_num, splits_num=10):
-        net = inception_v3(pretrained=True, transform_input=False).eval().to(self.device)
+        # net = inception_v3(pretrained=True, transform_input=False).eval().to(self.device)
         resize_module = nn.Upsample(size=(299, 299), mode='bilinear', align_corners=True).to(
             self.device)
         preds = np.zeros((self.batchsize * batch_num, 1000))
         for e in range(batch_num):
             imgs = resize_module(self.generate_data())
-            pred = F.softmax(net(imgs), dim=1).data.cpu().numpy()
+            pred = F.softmax(self.net(imgs), dim=1).data.cpu().numpy()
             preds[e * self.batchsize: e * self.batchsize + self.batchsize] = pred
         split_score = []
         chunk_size = preds.shape[0] // splits_num
@@ -114,7 +115,7 @@ class evalor():
         self.mu_real = torch.tensor(self.mu_real).float().cuda()
         self.sigma_real = torch.tensor(self.sigma_real).float().cuda()
         f.close()
-        self.net = load_inception_net(parallel=False)
+
 
     def accumulate_activations(self, img_num=50000):
         pool, logits = [], []

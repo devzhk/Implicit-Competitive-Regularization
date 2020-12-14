@@ -1,12 +1,12 @@
 #! /bin/bash
-CUDA_VISIBLE_DEVICES=0 python3 eval_pt.py \
+CUDA_VISIBLE_DEVICES=2 python3 eval_pt.py \
 --dataset CIFAR10 \
---model dc32 \
+--model dc \
 --z_dim 128 \
---begin 138000 \
---end 266000 \
---step 2000 \
---model_dir checkpoints/cifar-BCGD/BCGD-dc320.010_ \
---logdir eval_results/cifar10-dc32BCGD/ \
+--begin 0 \
+--end 465000 \
+--step 5000 \
+--model_dir checkpoints/cifar-ACGD/ACGD-dc0.010_ \
+--logdir eval_results/cifar10-dcACGD-old/ \
 --eval_fid
 #--eval_is
