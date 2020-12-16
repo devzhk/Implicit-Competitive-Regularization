@@ -7,6 +7,24 @@ from io import BytesIO
 import lmdb
 from PIL import Image
 from torch.utils.data import Dataset
+from torch.utils import data
+
+
+def data_sampler(dataset, shuffle, distributed):
+    if distributed:
+        return data.distributed.DistributedSampler(dataset, shuffle=shuffle)
+
+    if shuffle:
+        return data.RandomSampler(dataset)
+
+    else:
+        return data.SequentialSampler(dataset)
+
+
+def sample_data(loader):
+    while True:
+        for batch in loader:
+            yield batch
 
 
 class MultiResolutionDataset(Dataset):
@@ -42,3 +60,4 @@ class MultiResolutionDataset(Dataset):
         img = self.transform(img)
 
         return img
+
