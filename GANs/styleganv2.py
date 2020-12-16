@@ -1,11 +1,12 @@
 import math
 import random
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 
-from .ops import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
+from GANs.ops import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
 
 
 class PixelNorm(nn.Module):

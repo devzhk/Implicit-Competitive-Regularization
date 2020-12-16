@@ -1,6 +1,6 @@
 <h1 align="center">Implicit competitive regularization in GANs</h1>
 
-This code contains experiments for paper: 'Implicit competitive regularization in GANs': https://arxiv.org/abs/1910.05852
+This code contains experiments for our ICML 2020 paper: 'Implicit competitive regularization in GANs': http://proceedings.mlr.press/v119/schaefer20a.html
 
 **Warning**: This implementation is only for zero sum game setting because it relies on conjugate gradient method to solve matrix inversion efficiently, which requires the matrix to be positive definite. If you are using competitive gradient descent (CGD) algorithm for non-zero sum games, please check more details in CGD paper https://arxiv.org/abs/1905.12103. For example, GMRES (the generalized minimal residual) algorithm can be a solver for non-zero sum setting. 
 

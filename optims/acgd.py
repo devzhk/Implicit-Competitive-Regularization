@@ -100,7 +100,7 @@ class ACGD(object):
                                                             b=p_y, x=self.state['old_min'],
                                                             tol=tol, atol=atol,
                                                             lr_x=lr_min, lr_y=lr_max,
-                                                            nsteps=1000,
+                                                            nsteps=None,
                                                             device=self.device)
             elif self.solver == 'gd':
                 cg_y, iter_num = gd_solver(grad_x=grad_y_vec, grad_y=grad_x_vec,
