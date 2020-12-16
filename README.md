@@ -1,17 +1,33 @@
 <h1 align="center">Implicit competitive regularization in GANs</h1>
 
 This code contains experiments for our ICML paper: [Implicit competitive regularization in GANs](http://proceedings.mlr.press/v119/schaefer20a.html).
+## For competitive optimization
 
+Optimizers in this package are for competitive optimization problems, given by 
+$$
+\min_{x}\max_{y} f(x,y)
+$$
 
-## How to use new optimizer(ACGD) in our paper
-Package 'optims' contains the original Compeititive Gradient Descent (BCGD), and the Adaptive Competitive Gradient Descent (ACGD). 
+### Install through pip
+
+`pip install CGDs`
+
+See details at CGDs package: [CGDs · PyPI](https://pypi.org/project/CGDs/). 
+
+You can also directly copy the folder 'optims' to your workspace. 
+
+## How to use
+
+The package contains the original Compeititive Gradient Descent (BCGD), and the Adaptive Competitive Gradient Descent (ACGD). 
 
 **It's important to force cudnn to benchmark and pick the best algo.**
+
+Check more detail at [cgds-package: Package for CGD and ACGD optimizers ](https://github.com/devzhk/cgds-package). 
 
 ```python
 import torch
 torch.backends.cudnn.benchmark = True
-from optims import ACGD
+from CGDs import ACGD
 device = torch.device('cuda:0')
 lr = 0.0001
 G = Generator()
