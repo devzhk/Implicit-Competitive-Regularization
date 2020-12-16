@@ -22,7 +22,7 @@ The package contains the original Compeititive Gradient Descent (BCGD), and the 
 
 **It's important to force cudnn to benchmark and pick the best algo.**
 
-Check more detail at [cgds-package: Package for CGD and ACGD optimizers ](https://github.com/devzhk/cgds-package). 
+Check more details at [cgds-package: Package for CGD and ACGD optimizers ](https://github.com/devzhk/cgds-package). 
 
 ```python
 import torch
