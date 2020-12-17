@@ -20,6 +20,9 @@ You can also directly copy the folder 'optims' to your workspace.
 
 The package contains the original Compeititive Gradient Descent (BCGD), and the Adaptive Competitive Gradient Descent (ACGD). 
 
+Quickstart with notebook: [Examples of using ACGD](https://colab.research.google.com/drive/1-52aReaBAPNBtq2NcHxKkVIbdVXdyqtH?usp=sharing). 
+
+
 **It's important to force cudnn to benchmark and pick the best algo.**
 
 Check more details at [cgds-package: Package for CGD and ACGD optimizers ](https://github.com/devzhk/cgds-package). 
