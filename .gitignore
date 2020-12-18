@@ -12,11 +12,13 @@ tests/
 __pycache__/
 *.py[cod]
 *$py.class
-scripts/celeba*
-scripts/cifar*
-scripts/lsun*
 scripts/mnist*
-scripts/tmux_local_install.sh
+scripts/lsun*
+scripts/eval*
+scripts/cifar*
+scripts/celeba*
+
+
 # C extensions
 *.so
 
