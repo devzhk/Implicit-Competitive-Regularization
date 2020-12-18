@@ -1,0 +1,6 @@
+parameters:
+  z_dim: 100
+  image_size: 64
+  image_channel: 3
+  feature_num: 256
+  n_extra_layers: 0

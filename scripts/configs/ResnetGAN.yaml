@@ -1,0 +1,8 @@
+parameters:
+  z_dim: 128
+  image_size: 64
+  image_channel: 3
+  feature_num: 128
+  n_extra_layers: 0
+  batchnorm_d: True
+  batchnorm_g: True

@@ -4,7 +4,6 @@ logs/
 results/
 figs/
 checkpoints/
-scripts/
 metrics/stats/
 eval_results/
 .idea/
@@ -13,7 +12,11 @@ tests/
 __pycache__/
 *.py[cod]
 *$py.class
-
+scripts/celeba*
+scripts/cifar*
+scripts/lsun*
+scripts/mnist*
+scripts/tmux_local_install.sh
 # C extensions
 *.so
 

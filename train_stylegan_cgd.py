@@ -7,6 +7,6 @@ import os
 import torch
 from torch import nn, optim
 from torch.utils import data
-import torch.distributed as dist
 from torchvision import transforms, utils
 from tqdm import tqdm
+
