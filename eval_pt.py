@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torchvision.models.inception import inception_v3
 from GANs.models import GoodGenerator, DC_generator, dc_G
 from GANs import ResNet32Generator, dcG32
 from utils import eval_parser
@@ -26,7 +25,6 @@ class evalor():
         self.model_dir = model_dir
         self.init_writer()
         self.net = load_inception_net(parallel=False)
-
 
     def init_writer(self):
         if not os.path.exists(self.log_path):
@@ -74,7 +72,6 @@ class evalor():
                 self.get_metrics(i)
         self.f.close()
 
-    # Hongkai's IS implementation
     def generate_data(self):
         if self.dim == 3:
             z = torch.randn((self.batchsize, self.z_dim, 1, 1), device=self.device)
@@ -115,7 +112,6 @@ class evalor():
         self.mu_real = torch.tensor(self.mu_real).float().cuda()
         self.sigma_real = torch.tensor(self.sigma_real).float().cuda()
         f.close()
-
 
     def accumulate_activations(self, img_num=50000):
         pool, logits = [], []

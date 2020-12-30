@@ -32,6 +32,13 @@ from train_utils import requires_grad, accumulate, mixing_noise
 
 
 def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device):
+    ckpt_dir = 'checkpoints/stylegan'
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+    fig_dir ='figs/stylegan'
+    if not os.path.exists(fig_dir):
+        os.makedirs(fig_dir)
+
     loader = sample_data(loader)
 
     pbar = range(args.iter)

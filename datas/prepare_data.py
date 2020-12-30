@@ -16,7 +16,6 @@ def resize_and_convert(img, size, resample, quality=100):
     buffer = BytesIO()
     img.save(buffer, format="jpeg", quality=quality)
     val = buffer.getvalue()
-
     return val
 
 

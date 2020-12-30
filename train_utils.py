@@ -44,7 +44,6 @@ def mixing_noise(batch, latent_dim, prob, device):
         return [make_noise(batch, latent_dim, 1, device)]
 
 
-
 def requires_grad(model, flag=True):
     for p in model.parameters():
         p.requires_grad = flag

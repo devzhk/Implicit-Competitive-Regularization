@@ -208,6 +208,7 @@ def download_files(file_specs, num_threads=32, status_delay=0.2, timing_window=5
         except queue.Empty:
             pass
 
+
 def _download_thread(spec_queue, exception_queue, stats, download_kwargs):
     with requests.Session() as session:
         while not spec_queue.empty():
