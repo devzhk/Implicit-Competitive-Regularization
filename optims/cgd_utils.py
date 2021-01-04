@@ -49,11 +49,11 @@ def conjugate_gradient(grad_x, grad_y,
 
         r.data.add_(- alpha * Avp_)
         new_rdotr = torch.dot(r, r)
+        if new_rdotr < residual_tol or new_rdotr < atol:
+            break
         beta = new_rdotr / rdotr
         p = r + beta * p
         rdotr = new_rdotr
-        if rdotr < residual_tol or rdotr < atol:
-            break
     if i > 99:
         warnings.warn('CG iter num: %d' % (i + 1))
     return x, i + 1

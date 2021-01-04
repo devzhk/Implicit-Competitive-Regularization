@@ -25,6 +25,12 @@ from optims import ACGD, BCGD
 
 
 def train(args, loader, generator, discriminator, optimizer, g_ema, device):
+    ckpt_dir = 'checkpoints/stylegan-acgd'
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+    fig_dir = 'figs/stylegan-acgd'
+    if not os.path.exists(fig_dir):
+        os.makedirs(fig_dir)
     loader = sample_data(loader)
     pbar = range(args.iter)
     pbar = tqdm(pbar, initial=args.start_iter, dynamic_ncols=True, smoothing=0.01)
@@ -70,13 +76,14 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
         fake_pred = discriminator(fake_img)
         real_pred = discriminator(real_img_aug)
 
-        d_loss = d_logistic_loss(real_pred, fake_pred)
+        # d_loss = d_logistic_loss(real_pred, fake_pred)
+        d_loss = fake_pred.mean() - real_pred.mean()
         loss_dict["loss"] = d_loss.item()
         loss_dict["real_score"] = real_pred.mean().item()
         loss_dict["fake_score"] = fake_pred.mean().item()
 
-        d_regularize = i % args.d_reg_every == 0
-        # d_regularize = False
+        # d_regularize = i % args.d_reg_every == 0
+        d_regularize = False
         if d_regularize:
             real_img_cp = real_img.clone().detach()
             real_img_cp.requires_grad = True
