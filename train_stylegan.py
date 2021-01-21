@@ -99,7 +99,8 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
         fake_pred = discriminator(fake_img)
         real_pred = discriminator(real_img_aug)
         d_loss = d_logistic_loss(real_pred, fake_pred)
-
+        # TODO clean before commit
+        # d_loss = fake_pred.mean() - real_pred.mean()
         loss_dict["d"] = d_loss
         loss_dict["real_score"] = real_pred.mean()
         loss_dict["fake_score"] = fake_pred.mean()
@@ -129,8 +130,8 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 ada_aug_p = min(1, max(0, ada_aug_p))
                 ada_augment.mul_(0)
 
-        d_regularize = i % args.d_reg_every == 0
-
+        # d_regularize = i % args.d_reg_every == 0
+        d_regularize = False
         if d_regularize:
             real_img.requires_grad = True
             real_pred = discriminator(real_img)
@@ -154,15 +155,16 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
 
         fake_pred = discriminator(fake_img)
         g_loss = g_nonsaturating_loss(fake_pred)
-
+        # TODO clean before commit
+        # g_loss = - fake_pred.mean()
         loss_dict["g"] = g_loss
 
         generator.zero_grad()
         g_loss.backward()
         g_optim.step()
 
-        g_regularize = i % args.g_reg_every == 0
-
+        # g_regularize = i % args.g_reg_every == 0
+        g_regularize = False
         if g_regularize:
             path_batch_size = max(1, args.batch // args.path_batch_shrink)
             noise = mixing_noise(path_batch_size, args.latent, args.mixing, device)
@@ -378,8 +380,10 @@ if __name__ == "__main__":
     g_ema.eval()
     accumulate(g_ema, generator, 0)
 
-    g_reg_ratio = args.g_reg_every / (args.g_reg_every + 1)
-    d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
+    # g_reg_ratio = args.g_reg_every / (args.g_reg_every + 1)
+    # d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
+    g_reg_ratio = 1.0
+    d_reg_ratio = 1.0
 
     g_optim = optim.Adam(
         generator.parameters(),

@@ -5,7 +5,8 @@ import torch.autograd as autograd
 
 from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec
 
-class NCGD(object):
+
+class ACGDb(object):
     def __init__(self, max_params, min_params,
                  lr_max=1e-3, lr_min=1e-3,
                  eps=1e-5, beta=0.99,
@@ -57,7 +58,7 @@ class NCGD(object):
         atol = self.state['atol']
         time_step = self.state['step'] + 1
         self.state['step'] = time_step
-
+        loss.backward()
         grad_x = autograd.grad(loss, self.max_params, create_graph=True, retain_graph=True)
         grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
         grad_y = autograd.grad(loss, self.min_params, create_graph=True, retain_graph=True)
@@ -69,8 +70,8 @@ class NCGD(object):
         sq_avg_y = self.state['sq_exp_avg_min']
         sq_avg_x = torch.zeros_like(grad_x_vec_d, requires_grad=False) if sq_avg_x is None else sq_avg_x
         sq_avg_y = torch.zeros_like(grad_y_vec_d, requires_grad=False) if sq_avg_y is None else sq_avg_y
-        sq_avg_x.mul_(beta).addcmul_(1 - beta, grad_x_vec_d, grad_x_vec_d)
-        sq_avg_y.mul_(beta).addcmul_(1 - beta, grad_y_vec_d, grad_y_vec_d)
+        sq_avg_x.mul_(beta).addcmul_(grad_x_vec_d, grad_x_vec_d, value=1-beta)
+        sq_avg_y.mul_(beta).addcmul_(grad_y_vec_d, grad_y_vec_d, value=1-beta)
 
         bias_correction = 1 - beta ** time_step
         lr_max = math.sqrt(bias_correction) * lr_max / sq_avg_x.sqrt().add(eps)
@@ -91,11 +92,14 @@ class NCGD(object):
 
         if self.state['solve_x']:
             p_y.mul_(lr_min.sqrt())
-            cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                        x_params=self.min_params, y_params=self.max_params,
+            cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec,
+                                                        grad_y=grad_x_vec,
+                                                        x_params=self.min_params,
+                                                        y_params=self.max_params,
                                                         b=p_y, x=self.state['old_min'],
                                                         tol=tol, atol=atol,
-                                                        lr_x=lr_min, lr_y=lr_max, device=self.device)
+                                                        lr_x=lr_min, lr_y=lr_max,
+                                                        device=self.device)
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, min_update).detach_()
@@ -104,11 +108,14 @@ class NCGD(object):
             old_max = hcg.mul(lr_max.sqrt())
         else:
             p_x.mul_(lr_max.sqrt())
-            cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                        x_params=self.max_params, y_params=self.min_params,
+            cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec,
+                                                        grad_y=grad_y_vec,
+                                                        x_params=self.max_params,
+                                                        y_params=self.min_params,
                                                         b=p_x, x=self.state['old_max'],
                                                         tol=tol, atol=atol,
-                                                        lr_x=lr_max, lr_y=lr_min, device=self.device)
+                                                        lr_x=lr_max, lr_y=lr_min,
+                                                        device=self.device)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
             hcg = Hvp_vec(grad_x_vec, self.min_params, max_update).detach_()
@@ -143,5 +150,7 @@ class NCGD(object):
             self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
                               'cg_x': norm_cgx, 'cg_y': norm_cgy})
         self.state['solve_x'] = False if self.state['solve_x'] else True
+
+
 
 

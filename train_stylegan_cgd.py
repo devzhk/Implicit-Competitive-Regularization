@@ -76,8 +76,8 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
         fake_pred = discriminator(fake_img)
         real_pred = discriminator(real_img_aug)
 
-        # d_loss = d_logistic_loss(real_pred, fake_pred)
-        d_loss = fake_pred.mean() - real_pred.mean()
+        d_loss = d_logistic_loss(real_pred, fake_pred)
+        # d_loss = fake_pred.mean() - real_pred.mean()
         loss_dict["loss"] = d_loss.item()
         loss_dict["real_score"] = real_pred.mean().item()
         loss_dict["fake_score"] = fake_pred.mean().item()
@@ -173,7 +173,7 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
                     normalize=True,
                     range=(-1, 1),
                 )
-        if i % 100 == 0:
+        if i % 1000 == 0:
             torch.save(
                 {
                     "g": g_module.state_dict(),
