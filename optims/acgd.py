@@ -48,8 +48,8 @@ class ACGD(object):
 
     def set_lr(self, lr_max, lr_min):
         self.state.update({'lr_max': lr_max, 'lr_min': lr_min})
-        print('Maximizing side learning rate: {:.4f}\n '
-              'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
+        # print('Maximizing side learning rate: {:.4f}\n '
+        #       'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
 
     def step(self, loss):
         lr_max = self.state['lr_max']
@@ -72,6 +72,10 @@ class ACGD(object):
         sq_avg_y = self.state['sq_exp_avg_min']
         sq_avg_x = torch.zeros_like(grad_x_vec_d, requires_grad=False) if sq_avg_x is None else sq_avg_x
         sq_avg_y = torch.zeros_like(grad_y_vec_d, requires_grad=False) if sq_avg_y is None else sq_avg_y
+
+        sq_avg_x = sq_avg_x.to(self.device)
+        sq_avg_y = sq_avg_y.to(self.device)
+
         sq_avg_x.mul_(beta).addcmul_(grad_x_vec_d, grad_x_vec_d, value=1 - beta)
         sq_avg_y.mul_(beta).addcmul_(grad_y_vec_d, grad_y_vec_d, value=1 - beta)
 
