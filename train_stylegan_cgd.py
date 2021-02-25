@@ -239,6 +239,7 @@ if __name__ == '__main__':
         del ckpt
         torch.cuda.empty_cache()
 
+    optimizer.set_lr(lr_max=args.lr_g, lr_min=args.lr_d)
     if args.gpu_num > 1:
         generator = nn.DataParallel(generator, list(range(args.gpu_num)))
         discriminator = nn.DataParallel(discriminator, list(range(args.gpu_num)))
@@ -260,5 +261,11 @@ if __name__ == '__main__':
     )
 
     if wandb is not None and args.wandb:
-        wandb.init(project="styleganv2-acgd")
+        wandb.init(project="styleganv2-acgd",
+                   config={'lr_d': args.lr_d,
+                           'lr_g': args.lr_g,
+                           'Image size': args.size,
+                           'Batchsize': args.batch,
+                           'CG tolerance': args.tol}
+                   )
     train(args, loader, generator, discriminator, optimizer, g_ema, device)

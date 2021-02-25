@@ -45,8 +45,19 @@ class ACGD(object):
     def load_state_dict(self, state_dict):
         self.state.update(state_dict)
         print('Load state: {}'.format(state_dict))
+        if self.state['sq_exp_avg_max'] is not None:
+            self.state['sq_exp_avg_max'] = self.state['sq_exp_avg_max'].to(self.device)
+            self.state['sq_exp_avg_min'] = self.state['sq_exp_avg_min'].to(self.device)
+            self.state['old_max'] = self.state['old_max'].to(self.device)
+            self.state['old_min'] = self.state['old_min'].to(self.device)
 
     def set_lr(self, lr_max, lr_min):
+        ratio_max = math.sqrt(self.state['lr_max'] / lr_max)
+        ratio_min = math.sqrt(self.state['lr_min'] / lr_min)
+        if abs(ratio_max - 1) > 1e-3:
+            self.state['old_max'] = self.state['old_max'] * ratio_max
+        if abs(ratio_min - 1) > 1e-3:
+            self.state['old_min'] = self.state['old_min'] * ratio_min
         self.state.update({'lr_max': lr_max, 'lr_min': lr_min})
         # print('Maximizing side learning rate: {:.4f}\n '
         #       'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
@@ -72,9 +83,6 @@ class ACGD(object):
         sq_avg_y = self.state['sq_exp_avg_min']
         sq_avg_x = torch.zeros_like(grad_x_vec_d, requires_grad=False) if sq_avg_x is None else sq_avg_x
         sq_avg_y = torch.zeros_like(grad_y_vec_d, requires_grad=False) if sq_avg_y is None else sq_avg_y
-
-        sq_avg_x = sq_avg_x.to(self.device)
-        sq_avg_y = sq_avg_y.to(self.device)
 
         sq_avg_x.mul_(beta).addcmul_(grad_x_vec_d, grad_x_vec_d, value=1 - beta)
         sq_avg_y.mul_(beta).addcmul_(grad_y_vec_d, grad_y_vec_d, value=1 - beta)

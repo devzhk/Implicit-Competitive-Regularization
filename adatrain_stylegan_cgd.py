@@ -31,6 +31,7 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
     pbar = range(args.iter)
     pbar = tqdm(pbar, initial=args.start_iter, dynamic_ncols=True, smoothing=0.01)
 
+    accs = torch.tensor([1.0 for i in range(50)])
     loss_dict = {}
     if args.gpu_num > 1:
         g_module = generator.module
@@ -43,7 +44,7 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
     r_t_stat = 0
 
     sample_z = torch.randn(args.n_sample, args.latent, device=device)
-
+    ada_ratio = 2
     for idx in pbar:
         i = idx + args.start_iter
 
@@ -76,8 +77,16 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
 
 
         # update ada_ratio
-        ada_ratio = acc ** 2 * args.ratio
-        optimizer.set_lr(lr_max=ada_ratio * args.lr_d, lr_min=args.lr_d)
+        accs[i % 50] = acc
+        acc_indicator = sum(accs) / 50
+        if i % 20 == 0:
+            if acc_indicator > 0.85:
+                ada_ratio += 1
+            elif acc_indicator < 0.75:
+                ada_ratio -= 1
+            max_ratio = 2 ** min(4, ada_ratio)
+            min_ratio = 2 ** min(0, 4 - ada_ratio)
+            optimizer.set_lr(lr_max=max_ratio * args.lr_d, lr_min=min_ratio * args.lr_d)
 
         accumulate(g_ema, g_module, accum)
 
@@ -98,7 +107,7 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
                     "Discriminator": d_loss_val,
                     "Ada ratio": ada_ratio,
                     "Rt": r_t_stat,
-                    "Accuracy": acc,
+                    "Accuracy": acc_indicator,
                     "Real Score": real_score_val,
                     "Fake Score": fake_score_val
                 }
@@ -114,7 +123,7 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
                     normalize=True,
                     range=(-1, 1),
                 )
-        if i % 1000 == 0:
+        if i % 2000 == 0:
             torch.save(
                 {
                     "g": g_module.state_dict(),
