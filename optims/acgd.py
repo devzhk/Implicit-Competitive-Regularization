@@ -54,9 +54,9 @@ class ACGD(object):
     def set_lr(self, lr_max, lr_min):
         ratio_max = math.sqrt(self.state['lr_max'] / lr_max)
         ratio_min = math.sqrt(self.state['lr_min'] / lr_min)
-        if abs(ratio_max - 1) > 1e-3:
+        if abs(ratio_max - 1) > 1e-3 and self.state['old_max'] is not None:
             self.state['old_max'] = self.state['old_max'] * ratio_max
-        if abs(ratio_min - 1) > 1e-3:
+        if abs(ratio_min - 1) > 1e-3 and self.state['old_min'] is not None:
             self.state['old_min'] = self.state['old_min'] * ratio_min
         self.state.update({'lr_max': lr_max, 'lr_min': lr_min})
         # print('Maximizing side learning rate: {:.4f}\n '

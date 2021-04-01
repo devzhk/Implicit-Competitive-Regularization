@@ -21,6 +21,7 @@ from optims import ACGD, BCGD
 
 
 def train(args, loader, generator, discriminator, optimizer, g_ema, device):
+    collect_info = True
     ckpt_dir = 'checkpoints/stylegan-acgd'
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
@@ -79,14 +80,16 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
         # update ada_ratio
         accs[i % 50] = acc
         acc_indicator = sum(accs) / 50
-        if i % 20 == 0:
+        if i % 2 == 0:
             if acc_indicator > 0.85:
                 ada_ratio += 1
             elif acc_indicator < 0.75:
                 ada_ratio -= 1
             max_ratio = 2 ** min(4, ada_ratio)
             min_ratio = 2 ** min(0, 4 - ada_ratio)
-            optimizer.set_lr(lr_max=max_ratio * args.lr_d, lr_min=min_ratio * args.lr_d)
+            if args.ada_train:
+                print('Adjust lrs')
+                optimizer.set_lr(lr_max=max_ratio * args.lr_d, lr_min=min_ratio * args.lr_d)
 
         accumulate(g_ema, g_module, accum)
 
@@ -101,16 +104,34 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
             )
         )
         if wandb and args.wandb:
+            if collect_info:
+                cgd_info = optimizer.get_info()
+                wandb.log(
+                    {
+                        'CG iter num': cgd_info['iter_num'],
+                        'CG runtime': cgd_info['time'],
+                        'D gradient': cgd_info['grad_y'],
+                        'G gradient': cgd_info['grad_x'],
+                        'D hvp': cgd_info['hvp_y'],
+                        'G hvp': cgd_info['hvp_x'],
+                        'D cg': cgd_info['cg_y'],
+                        'G cg': cgd_info['cg_x']
+                    },
+                    step=i,
+                )
             wandb.log(
                 {
                     "Generator": d_loss_val,
                     "Discriminator": d_loss_val,
                     "Ada ratio": ada_ratio,
+                    'Generator lr': max_ratio * args.lr_d,
+                    'Discriminator lr': min_ratio * args.lr_d,
                     "Rt": r_t_stat,
                     "Accuracy": acc_indicator,
                     "Real Score": real_score_val,
                     "Fake Score": fake_score_val
-                }
+                },
+                step=i,
             )
         if i % 100 == 0:
             with torch.no_grad():
@@ -133,7 +154,7 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
                     "args": args,
                     "ada_aug_p": ada_aug_p,
                 },
-                f"checkpoints/stylegan-acgd/{str(i).zfill(6)}.pt",
+                f"checkpoints/stylegan-acgd/fix{str(i).zfill(6)}.pt",
             )
 
 
@@ -148,6 +169,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpu_num', type=int, default=1)
     parser.add_argument('--tol', type=float, default=1e-10)
     parser.add_argument('--atol', type=float, default=1e-16)
+    parser.add_argument('--ada_train', action="store_true", default=False)
     args = parser.parse_args()
     args.latent = 512
     args.n_mlp = 8
@@ -166,7 +188,7 @@ if __name__ == '__main__':
     ).to(device)
     g_ema.eval()
     accumulate(g_ema, generator, 0)
-
+    print('lr_g: {}, lr_d: {}'.format(args.lr_d * args.ratio, args.lr_d))
     optimizer = ACGD(max_params=generator.parameters(),
                      min_params=discriminator.parameters(),
                      lr_max=args.lr_d * args.ratio, lr_min=args.lr_d,
@@ -188,6 +210,7 @@ if __name__ == '__main__':
         del ckpt
         torch.cuda.empty_cache()
 
+    optimizer.set_lr(lr_max=args.ratio * args.lr_d, lr_min=args.lr_d)
     if args.gpu_num > 1:
         generator = nn.DataParallel(generator, list(range(args.gpu_num)))
         discriminator = nn.DataParallel(discriminator, list(range(args.gpu_num)))

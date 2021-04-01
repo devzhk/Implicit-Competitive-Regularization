@@ -122,6 +122,7 @@ def cgd_trainer():
     parser.add_argument('--atol', type=float, default=1e-16)
     parser.add_argument('--startn', type=int, default=0)
     parser.add_argument('--model_config', type=str, default=None)
+    parser.add_argument('--log', action="store_true", help="use weights and biases logging")
     return parser
 
 

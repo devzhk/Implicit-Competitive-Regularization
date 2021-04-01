@@ -9,7 +9,6 @@ import torchvision.utils as vutils
 from torch.optim.sgd import SGD
 from torch.optim.rmsprop import RMSprop
 
-from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D
@@ -34,7 +33,7 @@ print('random seed : %d' % seed)
 def train_sim(epoch_num=10, optim_type='ACGD',
               startPoint=None, start_n=0,
               z_dim=128, batchsize=64,
-              l2_penalty=0.0, momentum=0.0,
+              l2_penalty=0.0, momentum=0.0, log=False,
               loss_name='WGAN', model_name='dc',
               model_config=None,
               data_path='None',
@@ -49,9 +48,7 @@ def train_sim(epoch_num=10, optim_type='ACGD',
     D, G = get_model(model_name=model_name, z_dim=z_dim, configs=model_config)
     D.apply(weights_init_d).to(device)
     G.apply(weights_init_g).to(device)
-    from datetime import datetime
-    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
+
     optim_d = RMSprop(D.parameters(), lr=lr_d)
     optim_g = RMSprop(G.parameters(), lr=lr_g)
 
@@ -105,13 +102,15 @@ def train_sim(epoch_num=10, optim_type='ACGD',
                 save_checkpoint(path=logdir,
                                 name='%s-%s%.3f_%d.pth' % (optim_type, model_name, lr_g, count + start_n),
                                 D=D, G=G, optimizer=optim_d, g_optimizer=optim_g)
-            writer.add_scalars('Discriminator output',
-                               {'Generated image': d_fake.mean().item(),
-                                'Real image': d_real.mean().item()},
-                               global_step=count)
-            writer.add_scalar('Loss', loss.item(), global_step=count)
+            if wandb and log:
+                wandb.log(
+                    {
+                        'Real score': d_real.mean().item(),
+                        'Fake score': d_fake.mean().item(),
+                        'Loss': loss.item()
+                    }
+                )
             count += 1
-    writer.close()
 
 
 def train_mnist(epoch_num=10, show_iter=100, logdir='test',
@@ -156,9 +155,6 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
         fixed_vec = fixed_data['pred_vec']
         print('load fixed data set')
 
-    from datetime import datetime
-    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    # writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
     d_optimizer = SGD(D.parameters(), lr=lr_d)
     g_optimizer = SGD(G.parameters(), lr=lr_g)
     timer = time.time()
@@ -226,10 +222,9 @@ def train_mnist(epoch_num=10, show_iter=100, logdir='test',
                                 name='SGD-%.3f_%d.pth' % (lr_d, count),
                                 D=D, G=G)
             count += 1
-    # writer.close()
 
 
-def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
+def train_cgd(epoch_num=10, optim_type='ACGD',
               startPoint=None, start_n=0,
               z_dim=128, batchsize=64,
               tols={'tol': 1e-10, 'atol': 1e-16},
@@ -240,39 +235,37 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
               show_iter=100, logdir='test',
               dataname='CIFAR10',
               device='cpu', gpu_num=1,
-              collect_info=False):
-    lr_d = 0.01
-    lr_g = 0.01
+              ada_train=True, log=False,
+              collect_info=False, args=None):
+    lr_d = args['lr_d']
+    lr_g = args['lr_g']
     dataset = get_data(dataname=dataname, path=data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
     D, G = get_model(model_name=model_name, z_dim=z_dim, configs=model_config)
     D.apply(weights_init_d).to(device)
     G.apply(weights_init_g).to(device)
-    from datetime import datetime
-    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    writer = SummaryWriter(log_dir='logs/%s/%s_%.3f' % (logdir, current_time, lr_d))
     if optim_type == 'BCGD':
         optimizer = BCGD(max_params=G.parameters(), min_params=D.parameters(),
                          lr_max=lr_g, lr_min=lr_d, momentum=momentum,
                          tol=tols['tol'], atol=tols['atol'],
                          device=device)
-        scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
+        # scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
     elif optim_type == 'ICR':
         optimizer = ICR(max_params=G.parameters(), min_params=D.parameters(),
                         lr=lr_d, alpha=1.0, device=device)
-        scheduler = icrScheduler(optimizer, milestone)
+        # scheduler = icrScheduler(optimizer, milestone)
     elif optim_type == 'ACGD':
         optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(),
                          lr_max=lr_g, lr_min=lr_d,
                          tol=tols['tol'], atol=tols['atol'],
                          device=device, solver='cg')
-        scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
+        # scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
     if startPoint is not None:
         chk = torch.load(startPoint)
         D.load_state_dict(chk['D'])
         G.load_state_dict(chk['G'])
-        optimizer.load_state_dict(chk['optim'])
+        # optimizer.load_state_dict(chk['optim'])
         print('Start from %s' % startPoint)
     if gpu_num > 1:
         D = nn.DataParallel(D, list(range(gpu_num)))
@@ -283,8 +276,12 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
         fixed_noise = torch.randn((64, z_dim, 1, 1), device=device)
     else:
         fixed_noise = torch.randn((64, z_dim), device=device)
+
+    mod = 10
+    accs = torch.tensor([0.8 for _ in range(mod)])
+
     for e in range(epoch_num):
-        scheduler.step(epoch=e)
+        # scheduler.step(epoch=e)
         print('======Epoch: %d / %d======' % (e, epoch_num))
         for real_x in dataloader:
             real_x = real_x[0].to(device)
@@ -301,7 +298,20 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
             optimizer.zero_grad()
             optimizer.step(loss)
 
-            if count % show_iter == 0:
+            num_correct = torch.sum(d_real > 0) + torch.sum(d_fake < 0)
+            acc = num_correct.item() / (d_real.shape[0] + d_fake.shape[0])
+            accs[count % mod] = acc
+            acc_indicator = sum(accs) / mod
+            if acc_indicator > 0.9:
+                ada_ratio = 0.05
+            elif acc_indicator < 0.80:
+                ada_ratio = 0.1
+            else:
+                ada_ratio = 1.0
+            if ada_train:
+                optimizer.set_lr(lr_max=lr_g, lr_min=ada_ratio * lr_d)
+
+            if count % show_iter == 0 and count != 0:
                 time_cost = time.time() - timer
                 print('Iter :%d , Loss: %.5f, time: %.3fs'
                       % (count, loss.item(), time_cost))
@@ -313,28 +323,36 @@ def train_cgd(epoch_num=10, milestone=None, optim_type='ACGD',
                         os.makedirs(path)
                     vutils.save_image(fake_img, path + 'iter_%d.png' % (count + start_n), normalize=True)
                 save_checkpoint(path=logdir,
-                                name='%s-%s%.3f_%d.pth' % (optim_type, model_name, lr_g, count + start_n),
+                                name='%s-%s_%d.pth' % (optim_type, model_name, count + start_n),
                                 D=D, G=G, optimizer=optimizer)
-            writer.add_scalars('Discriminator output',
-                               {'Generated image': d_fake.mean().item(),
-                                'Real image': d_real.mean().item()},
-                               global_step=count)
-            writer.add_scalar('Loss', loss.item(), global_step=count)
-            if collect_info:
+            if wandb and log:
+                wandb.log(
+                    {
+                        'Real score': d_real.mean().item(),
+                        'Fake score': d_fake.mean().item(),
+                        'Loss': loss.item(),
+                        'Acc_indicator': acc_indicator,
+                        'Ada ratio': ada_ratio
+                    },
+                    step=count,
+                )
+
+            if collect_info and wandb:
                 cgd_info = optimizer.get_info()
-                writer.add_scalar('Conjugate Gradient/iter num',
-                                  cgd_info['iter_num'], global_step=count)
-                writer.add_scalar('Conjugate Gradient/running time',
-                                  cgd_info['time'], global_step=count)
-                writer.add_scalars('Delta', {'D gradient': cgd_info['grad_y'],
-                                             'G gradient': cgd_info['grad_x'],
-                                             'D hvp': cgd_info['hvp_y'],
-                                             'G hvp': cgd_info['hvp_x'],
-                                             'D cg': cgd_info['cg_y'],
-                                             'G cg': cgd_info['cg_x']},
-                                   global_step=count)
+                wandb.log(
+                    {
+                        'CG iter num': cgd_info['iter_num'],
+                        'CG runtime': cgd_info['time'],
+                        'D gradient': cgd_info['grad_y'],
+                        'G gradient': cgd_info['grad_x'],
+                        'D hvp': cgd_info['hvp_y'],
+                        'G hvp': cgd_info['hvp_x'],
+                        'D cg': cgd_info['cg_y'],
+                        'G cg': cgd_info['cg_x']
+                    },
+                    step=count
+                )
             count += 1
-    writer.close()
 
 
 if __name__ == '__main__':
@@ -355,11 +373,19 @@ if __name__ == '__main__':
     chk_path = config['checkpoint']
     lr_g = config['lr_g']
     lr_d = config['lr_d']
-    milestones = {'0': (lr_g, lr_d)}
+    # milestones = {'0': (lr_g, lr_d)}
     tols = {'tol': config['tol'], 'atol': config['atol']}
     print(tols)
 
-    train_cgd(epoch_num=config['epoch_num'], milestone=milestones,
+    if wandb and config['log']:
+        wandb.init(project="%s-ada-acgd" % config['dataset'],
+                   config={'lr_g': lr_g,
+                           'lr_d': lr_d,
+                           'Model name': config['model'],
+                           'Batchsize': config['batchsize'],
+                           'CG tolerance': config['tol']})
+
+    train_cgd(epoch_num=config['epoch_num'],
               optim_type=config['optimizer'],
               startPoint=chk_path, start_n=start_n,
               show_iter=config['show_iter'], logdir=config['logdir'],
@@ -369,4 +395,4 @@ if __name__ == '__main__':
               loss_name=config['loss_type'],
               model_name=config['model'], model_config=model_args,
               tols=tols, device=device, gpu_num=config['gpu_num'],
-              collect_info=True)
+              collect_info=True, log=config['log'], ada_train=True, args=config)
