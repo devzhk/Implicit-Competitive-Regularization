@@ -184,3 +184,13 @@ def zero_grad(params):
             p.grad.detach()
             p.grad.zero_()
 
+
+def update_params(params, delta):
+    if delta == 0.0:
+        return
+    index = 0
+    for p in params:
+        p.data.add_(delta[index: index + p.numel()].reshape(p.shape))
+        index += p.numel()
+    if index != delta.numel():
+        raise ValueError('CG size mismatch')

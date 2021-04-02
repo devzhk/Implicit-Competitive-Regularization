@@ -7,7 +7,6 @@ import torch.nn as nn
 from torch.optim import SGD, Adam
 import torchvision.utils as vutils
 
-# from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D

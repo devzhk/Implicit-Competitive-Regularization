@@ -12,7 +12,7 @@ from torch.optim.rmsprop import RMSprop
 from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D
-from optims import ACGD, BCGD, ICR
+from optims import ACGD, BCGD, CNAG
 from train_utils import get_data, weights_init_d, weights_init_g, \
     get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler, get_model
 from losses import get_loss
@@ -251,8 +251,8 @@ def train_cgd(epoch_num=10, optim_type='ACGD',
                          tol=tols['tol'], atol=tols['atol'],
                          device=device)
         # scheduler = lr_scheduler(optimizer=optimizer, milestone=milestone)
-    elif optim_type == 'ICR':
-        optimizer = ICR(max_params=G.parameters(), min_params=D.parameters(),
+    elif optim_type == 'CNAG':
+        optimizer = CNAG(max_params=G.parameters(), min_params=D.parameters(),
                         lr=lr_d, alpha=1.0, device=device)
         # scheduler = icrScheduler(optimizer, milestone)
     elif optim_type == 'ACGD':
