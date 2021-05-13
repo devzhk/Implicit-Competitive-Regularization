@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from GANs.models import GoodGenerator, DC_generator, dc_G
+from GANs.styleganv2 import Generator
 from GANs import ResNet32Generator, dcG32
 from utils import eval_parser
 from metrics.is_biggan import load_inception_net, torch_calculate_frechet_distance, \
@@ -13,7 +14,17 @@ from metrics.is_biggan import load_inception_net, torch_calculate_frechet_distan
 
 
 class evalor():
-    def __init__(self, G, z_dim, model_dir, log_path, device, batchsize=100, dim=1):
+    def __init__(self, G, z_dim, model_dir, log_path, device,
+                 batchsize=100, dim=1, load_ema=False, style_z=False):
+        '''
+        :param G:
+        :param z_dim:
+        :param model_dir:
+        :param log_path:
+        :param device:
+        :param batchsize:
+        :param dim:  latent code dimensionality
+        '''
         self.is_flag = False
         self.fid_flag = False
         self.log_path = log_path
@@ -23,6 +34,8 @@ class evalor():
         self.dim = dim
         self.batchsize = batchsize
         self.model_dir = model_dir
+        self.load_ema = load_ema
+        self.style_z = style_z
         self.init_writer()
         self.net = load_inception_net(parallel=False)
 
@@ -38,7 +51,10 @@ class evalor():
 
     def load_model(self, model_path):
         chkpoint = torch.load(model_path)
-        self.G.load_state_dict(chkpoint['G'])
+        if self.load_ema:
+            self.G.load_state_dict(chkpoint['g_ema'])
+        else:
+            self.G.load_state_dict(chkpoint['G'])
         print('loading model from %s' % model_path)
 
     def get_metrics(self, count):
@@ -68,7 +84,10 @@ class evalor():
             self.load_fid(dataname=dataname)
         with torch.no_grad():
             for i in range(begin, end + step, step):
-                self.load_model(model_path=self.model_dir + '%d.pth' % i)
+                if self.style_z:
+                    self.load_model(self.model_dir + str(i).zfill(6) + '.pt')
+                else:
+                    self.load_model(model_path=self.model_dir + '%d.pth' % i)
                 self.get_metrics(i)
         self.f.close()
 
@@ -77,7 +96,11 @@ class evalor():
             z = torch.randn((self.batchsize, self.z_dim, 1, 1), device=self.device)
         else:
             z = torch.randn((self.batchsize, self.z_dim), device=self.device)
-        data = self.G(z)
+
+        if self.style_z:
+            data, _ = self.G([z])
+        else:
+            data = self.G(z)
         return data
 
     def get_inception_score(self, batch_num, splits_num=10):
@@ -152,7 +175,9 @@ if __name__ == '__main__':
     elif model == 'mnist':
         G = dc_G(z_dim=z_dim)
     elif model == 'dc32':
-        G =dcG32(z_dim=z_dim)
+        G = dcG32(z_dim=z_dim)
+    elif model == 'styleGANv2':
+        G = Generator(128, 512, 8, channel_multiplier=2)
     else:
         raise ValueError('No matching generator for %s' % model)
     G.to(device)
@@ -161,7 +186,9 @@ if __name__ == '__main__':
                     model_dir=config['model_dir'],
                     device=device,
                     log_path=config['logdir'],
-                    dim=config['dim'])
+                    dim=config['dim'],
+                    load_ema=config['load_ema'],
+                    style_z=config['style_z'])
     evalor.eval_metrics(begin=config['begin'], end=config['end'], step=config['step'],
                         is_flag=config['eval_is'], fid_flag=config['eval_fid'],
                         dataname=config['dataset'])

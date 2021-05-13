@@ -173,7 +173,7 @@ def train(args, loader, generator, discriminator, optimizer, g_ema, device):
                     normalize=True,
                     range=(-1, 1),
                 )
-        if i % 1000 == 0:
+        if i % 100 == 0:
             torch.save(
                 {
                     "g": g_module.state_dict(),
@@ -234,7 +234,7 @@ if __name__ == '__main__':
         generator.load_state_dict(ckpt["g"])
         discriminator.load_state_dict(ckpt["d"])
         g_ema.load_state_dict(ckpt["g_ema"])
-        optimizer.load_state_dict(ckpt["d_optim"])
+        # optimizer.load_state_dict(ckpt["d_optim"])
         # TODO: check the following two lines
         del ckpt
         torch.cuda.empty_cache()

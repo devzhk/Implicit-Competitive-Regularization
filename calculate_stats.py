@@ -45,25 +45,39 @@ def prepare_parser():
     parser.add_argument(
         '--seed', type=int, default=0,
         help='Random seed to use.')
+    parser.add_argument(
+        '--image_size', type=int, default=128,
+        help='Image size')
     return parser
 
 
 def run(config):
     # Get loader
     config['drop_last'] = False
-    loader = get_data(dataname=config['dataset'], path=config['data_path'])
+    loader = get_data(dataname=config['dataset'], path=config['data_path'],
+                      img_size=config['image_size'])
 
     # Load inception net
     net = load_inception_net(parallel=config['parallel'])
     pool, logits = [], []
     device = torch.device('cuda:0')
     print(device)
-    for i, (x, y) in enumerate(tqdm(loader)):
-        x = x.to(device)
-        with torch.no_grad():
-            pool_val, logits_val = net(x)
-            pool += [np.asarray(pool_val.cpu())]
-            logits += [np.asarray(F.softmax(logits_val, 1).cpu())]
+    if config['dataset'] == 'FFHQ':
+        for i, x in enumerate(tqdm(loader)):
+            if i >= 69990:
+                break
+            x = x.to(device)
+            with torch.no_grad():
+                pool_val, logits_val = net(x)
+                pool += [np.asarray(pool_val.cpu())]
+                logits += [np.asarray(F.softmax(logits_val, 1).cpu())]
+    else:
+        for i, (x, y) in enumerate(tqdm(loader)):
+            x = x.to(device)
+            with torch.no_grad():
+                pool_val, logits_val = net(x)
+                pool += [np.asarray(pool_val.cpu())]
+                logits += [np.asarray(F.softmax(logits_val, 1).cpu())]
 
     pool, logits = [np.concatenate(item, 0) for item in [pool, logits]]
     # uncomment to save pool, logits, and labels to disk
@@ -79,7 +93,7 @@ def run(config):
     print('Calculating means and covariances...')
     mu, sigma = np.mean(pool, axis=0), np.cov(pool, rowvar=False)
     print('Saving calculated means and covariances to disk...')
-    np.savez('metrics/stats/' + config['dataset'] + '_inception_moments.npz', **{'mu': mu, 'sigma': sigma})
+    np.savez('metrics/stats/' + config['dataset'] + str(config['image_size']) + '_inception_moments.npz', **{'mu': mu, 'sigma': sigma})
 
 
 def main():

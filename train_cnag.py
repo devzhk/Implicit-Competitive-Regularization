@@ -33,10 +33,12 @@ def train(epoch_num=10, optim_type='CNAG',
           data_path='None',
           show_iter=100, logdir='test',
           dataname='CIFAR10',
-          device='cpu', gpu_num=1,
+          device=torch.device('cpu'),
+          gpu_num=1,
           log=False, args=None):
     lr_d = args['lr_d']
     lr_g = args['lr_g']
+    momentum = args['momentum']
     dataset = get_data(dataname=dataname, path=data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
@@ -44,8 +46,8 @@ def train(epoch_num=10, optim_type='CNAG',
     D.apply(weights_init_d).to(device)
     G.apply(weights_init_g).to(device)
 
-    d_optimizer = CNAG(D.parameters(), lr=lr_d)
-    g_optimizer = CNAG(G.parameters(), lr=lr_g)
+    d_optimizer = CNAG(D.parameters(), lr=lr_d, betas=(momentum, 0.99))
+    g_optimizer = CNAG(G.parameters(), lr=lr_g, betas=(momentum, 0.99))
 
     if startPoint is not None:
         chk = torch.load(startPoint)
@@ -58,6 +60,7 @@ def train(epoch_num=10, optim_type='CNAG',
         G = nn.DataParallel(G, list(range(gpu_num)))
     timer = time.time()
     count = 0
+    iter_num = config['iter_num']
 
     if 'DCGAN' in model_name:
         fixed_noise = torch.randn((64, z_dim, 1, 1), device=device)
@@ -73,28 +76,31 @@ def train(epoch_num=10, optim_type='CNAG',
             else:
                 z = torch.randn((real_x.shape[0], z_dim), device=device)
 
-            d_optimizer.update_param(-1.0)
-            g_optimizer.update_param(1.0)
-            d_real = D(real_x)
-            fake_x = G(z)
-            d_fake = D(fake_x)
-            d_loss = get_loss(name=loss_name, g_loss=False,
-                            d_real=d_real, d_fake=d_fake,
-                            l2_weight=l2_penalty, D=D)
-            d_optimizer.zero_grad()
-            g_optimizer.zero_grad()
-            d_loss.backward()
-            d_optimizer.step()
+            for j in range(iter_num):
+                g_optimizer.update_param(1.0)
+                d_real = D(real_x)
+                fake_x = G(z)
+                d_fake = D(fake_x)
+                d_loss = get_loss(name=loss_name, g_loss=False,
+                                d_real=d_real, d_fake=d_fake,
+                                l2_weight=l2_penalty, D=D)
+                d_optimizer.zero_grad()
+                g_optimizer.zero_grad()
+                d_loss.backward()
+                d_optimizer.step()
 
+                d_optimizer.update_param(1.0)
+                g_optimizer.update_param(-1.0)
+                fake_x = G(z)
+                d_fake = D(fake_x)
+                g_loss = get_loss(name=loss_name, g_loss=True, d_fake=d_fake)
+                d_optimizer.zero_grad()
+                g_optimizer.zero_grad()
+                g_loss.backward()
+                g_optimizer.step()
+                d_optimizer.update_param(-1.0)
             d_optimizer.update_param(1.0)
-            g_optimizer.update_param(-1.0)
-            fake_x = G(z)
-            d_fake = D(fake_x)
-            g_loss = get_loss(name=loss_name, g_loss=True, d_fake=d_fake)
-            d_optimizer.zero_grad()
-            g_optimizer.zero_grad()
-            g_loss.backward()
-            g_optimizer.step()
+            g_optimizer.update_param(1.0)
 
             if count % show_iter == 0 and count != 0:
                 time_cost = time.time() - timer
@@ -119,7 +125,8 @@ def train(epoch_num=10, optim_type='CNAG',
                         'Fake score': d_fake.mean().item(),
                         'D Loss': d_loss.item(),
                         'G Loss': g_loss.item(),
-                    }
+                    },
+                    step=count
                 )
             count += 1
 
@@ -129,6 +136,7 @@ if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
     parser = cgd_trainer()
+    parser.add_argument('--iter_num', type=int, default=1)
     config = vars(parser.parse_args())
     print(config)
     model_args = None
@@ -146,7 +154,9 @@ if __name__ == '__main__':
                    config={'lr_g': lr_g,
                            'lr_d': lr_d,
                            'Model name': config['model'],
-                           'Batchsize': config['batchsize']
+                           'Batchsize': config['batchsize'],
+                           'Momentum': config['momentum'],
+                           'Iter num': config['iter_num']
                            })
     train(epoch_num=config['epoch_num'],
           optim_type=config['optimizer'],
@@ -156,4 +166,6 @@ if __name__ == '__main__':
           data_path=config['datapath'], dataname=config['dataset'],
           loss_name=config['loss_type'],
           model_name=config['model'], model_config=model_args,
-          gpu_num=config['gpu_num'], args=config)
+          gpu_num=config['gpu_num'], args=config,
+          log=config['log'],
+          device=device)

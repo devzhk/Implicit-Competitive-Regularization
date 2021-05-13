@@ -203,7 +203,7 @@ def train_g(epoch_num=10, logdir='test',
         # writer.close()
 
 
-def train(epoch_num=10, milestone=None,
+def train(epoch_num=10,
           optim_type='Adam', momentum=0.5,
           lr_d=1e-4, lr_g=1e-4,
           startPoint=None, start_n=0,
@@ -212,24 +212,28 @@ def train(epoch_num=10, milestone=None,
           model_name='dc', model_config=None,
           data_path='None',
           show_iter=100, logdir='test', dataname='cifar10',
-          device='cpu', gpu_num=1, saturating=False):
+          device='cpu', gpu_num=1, saturating=False, args=None):
     dataset = get_data(dataname=dataname, path=data_path)
     dataloader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                             num_workers=4)
     D, G = get_model(model_name=model_name, z_dim=z_dim, configs=model_config)
     D.apply(weights_init_d).to(device)
     G.apply(weights_init_g).to(device)
-    from datetime import datetime
-    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    # writer = SummaryWriter(log_dir='logs/%s/%s' % (logdir, current_time))
-    d_optimizer = Adam(D.parameters(), lr=lr_d, betas=(momentum, 0.99))
-    g_optimizer = Adam(G.parameters(), lr=lr_g, betas=(momentum, 0.99))
+    if optim_type == 'Adam':
+        d_optimizer = Adam(D.parameters(), lr=lr_d, betas=(momentum, 0.99))
+        g_optimizer = Adam(G.parameters(), lr=lr_g, betas=(momentum, 0.99))
+    else:
+        d_optimizer = SGD(D.parameters(), lr=lr_d)
+        g_optimizer = SGD(G.parameters(), lr=lr_g)
     if startPoint is not None:
         chk = torch.load(startPoint)
         D.load_state_dict(chk['D'])
         G.load_state_dict(chk['G'])
-        d_optimizer.load_state_dict(chk['d_optim'])
-        g_optimizer.load_state_dict(chk['g_optim'])
+        if not config['restart']:
+            d_optimizer.load_state_dict(chk['d_optim'])
+            g_optimizer.load_state_dict(chk['g_optim'])
+        else:
+            print('Restart optimizer')
         print('Start from %s' % startPoint)
     if gpu_num > 1:
         D = nn.DataParallel(D, list(range(gpu_num)))
@@ -299,6 +303,7 @@ if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     parser = train_seq_parser()
+    parser.add_argument('--restart', action='store_true', default=False)
     config = vars(parser.parse_args())
     print(config)
     model_args = None
@@ -324,7 +329,7 @@ if __name__ == '__main__':
     #         model_weight=fixG_path, load_d=True, load_g=True,
     #         device=device)
 
-    train(epoch_num=config['epoch_num'], milestone=[0, 0],
+    train(epoch_num=config['epoch_num'],
           optim_type=config['optimizer'], momentum=config['momentum'],
           lr_d=config['lr_d'], lr_g=config['lr_g'],
           startPoint=config['checkpoint'],
@@ -336,4 +341,4 @@ if __name__ == '__main__':
           loss_name=config['loss_type'],
           model_name=config['model'], model_config=model_args,
           device=device, gpu_num=config['gpu_num'],
-          saturating=False)
+          saturating=False, args=config)

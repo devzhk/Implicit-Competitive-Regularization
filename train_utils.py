@@ -13,6 +13,7 @@ from GANs import dc_G, dc_D, \
     ResNet32Discriminator, ResNet32Generator, DC_discriminatorW, GoodSNDiscriminator, \
     dcD32, dcG32, DCGAN_G, DCGAN_D, ResNetDiscriminator, ResNetGenerator
 
+from datas.dataset_utils import MultiResolutionDataset
 
 mnist_tf = transforms.Compose([transforms.ToTensor(),
                                transforms.Normalize((0.5,), (0.5,))
@@ -212,6 +213,13 @@ def get_data(dataname, path, img_size=64):
                                 transforms.ToTensor(),
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                               ]))
+    elif dataname == 'FFHQ':
+        dataset = MultiResolutionDataset(path,
+                                         transform=transforms.Compose([
+                                            transforms.ToTensor(),
+                                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)]),
+                                         resolution=img_size
+                                         )
     return dataset
 
 

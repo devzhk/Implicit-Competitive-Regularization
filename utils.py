@@ -225,4 +225,8 @@ def eval_parser():
         '--eval_is', action='store_true', default=False)
     parser.add_argument(
         '--eval_fid', action='store_true', default=False)
+    parser.add_argument(
+        '--load_ema', action='store_true', default=False)
+    parser.add_argument(
+        '--style_z', action='store_true', default=False)
     return parser

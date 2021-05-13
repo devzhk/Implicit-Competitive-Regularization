@@ -4,9 +4,9 @@ CUDA_VISIBLE_DEVICES=2 python3 eval_pt.py \
 --model DCGAN \
 --z_dim 100 \
 --dim 3 \
---begin 0 \
---end 23500 \
---step 500 \
---model_dir checkpoints/celeba-Adam/Adam-DCGAN_ \
---logdir eval_results/celeba-Adam/ \
+--begin 20000 \
+--end 22000 \
+--step 100 \
+--model_dir checkpoints/celeba-adam-restart/Adam-DCGAN_ \
+--logdir eval_results/celeba-Adam-restart/ \
 --eval_fid
