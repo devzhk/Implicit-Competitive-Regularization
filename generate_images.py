@@ -1,5 +1,5 @@
 import os
-from train_utils import get_data
+from utils.train_utils import get_data
 import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 

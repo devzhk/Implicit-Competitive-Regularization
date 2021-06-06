@@ -5,5 +5,4 @@ from .acgd import ACGD
 from .ocgd import OCGD
 # from .testOptim import testBCGD
 from .lcgd import LCGD
-from .scgd import SCGD
-from .scg import SCG
+from .sacgd import SACGD

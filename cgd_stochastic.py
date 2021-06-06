@@ -6,11 +6,12 @@ import torch.nn as nn
 import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 
-from optims import SCGD, SCG
-from train_utils import get_data, weights_init_d, weights_init_g, \
-    get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler, get_model
-from losses import get_loss
-from utils import cgd_trainer
+from optims.scg import SCG
+from optims.scgd import SCGD
+from utils.train_utils import get_data, weights_init_d, weights_init_g, \
+    save_checkpoint, lr_scheduler, get_model
+from utils.losses import get_loss
+from utils.argparser import cgd_trainer
 
 # seed = torch.randint(0, 1000000, (1,))
 seed = 2020

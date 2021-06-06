@@ -1,5 +1,4 @@
 import os
-import csv
 import time
 import torch
 import torch.nn as nn
@@ -13,9 +12,9 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from GANs.models import dc_D, dc_G, GoodDiscriminator, GoodGenerator
-from optims.adam import Adam, RAdam
+from optims.adam import Adam
 from optims.cgd_utils import zero_grad, Hvp_vec, conjugate_gradient
-from train_utils import get_data
+from utils.train_utils import get_data
 
 
 seed = torch.randint(0, 1000000, (1,))

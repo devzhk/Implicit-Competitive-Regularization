@@ -1,13 +1,11 @@
+# Adapted from https://github.com/fyu/lsun/blob/master/download.py
+
 from __future__ import print_function, division
 import argparse
 from os.path import join
 
 import subprocess
 from urllib.request import Request, urlopen
-
-__author__ = 'Fisher Yu'
-__email__ = 'fy@cs.princeton.edu'
-__license__ = 'MIT'
 
 
 def list_categories():
@@ -16,7 +14,7 @@ def list_categories():
         return response.read().decode().strip().split('\n')
 
 
-def download(out_dir, category, set_name):
+def download_scene(out_dir, category, set_name):
     url = 'http://dl.yf.io/lsun/scenes/{category}_' \
           '{set_name}_lmdb.zip'.format(**locals())
     if set_name == 'test':
@@ -30,27 +28,48 @@ def download(out_dir, category, set_name):
     subprocess.call(cmd)
 
 
+def download_object(out_dir, category):
+    url = f'http://dl.yf.io/lsun/objects/{category}.zip'
+    out_path = join(out_dir, '{category}.zip')
+    cmd = ['curl', url, '-o', out_path]
+    print('Downloading', category, 'set')
+    subprocess.call(cmd)
+
+
+def download_chksum(out_dir, category):
+    url = f'http://dl.yf.io/lsun/objects/{category}.zip.md5'
+    out_path = join(out_dir, '{category}.zip.md5')
+    cmd = ['curl', url, '-o', out_path]
+    print('Downloading', category, 'Checksum')
+    subprocess.call(cmd)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', '--out_dir', default='')
     parser.add_argument('-c', '--category', default=None)
+    parser.add_argument('--objects', action="store_true")
     args = parser.parse_args()
-
-    categories = list_categories()
-    if args.category is None:
-        print('Downloading', len(categories), 'categories')
-        for category in categories:
-            download(args.out_dir, category, 'train')
-            download(args.out_dir, category, 'val')
-        download(args.out_dir, '', 'test')
-    else:
-        if args.category == 'test':
-            download(args.out_dir, '', 'test')
-        elif args.category not in categories:
-            print('Error:', args.category, "doesn't exist in", 'LSUN release')
+    if not args.objects:
+        # download scenes data
+        categories = list_categories()
+        if args.category is None:
+            print('Downloading', len(categories), 'categories')
+            for category in categories:
+                download_scene(args.out_dir, category, 'train')
+                download_scene(args.out_dir, category, 'val')
+            download_scene(args.out_dir, '', 'test')
         else:
-            download(args.out_dir, args.category, 'train')
-            download(args.out_dir, args.category, 'val')
+            if args.category == 'test':
+                download_scene(args.out_dir, '', 'test')
+            elif args.category not in categories:
+                print('Error:', args.category, "doesn't exist in", 'LSUN release')
+            else:
+                download_scene(args.out_dir, args.category, 'train')
+                download_scene(args.out_dir, args.category, 'val')
+    else:
+        # download_object(args.out_dir, args.category)
+        download_chksum(args.out_dir, args.category)
 
 
 if __name__ == '__main__':

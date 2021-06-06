@@ -11,7 +11,6 @@ from torch.nn import functional as F
 
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import CIFAR10
 from torchvision.models.inception import inception_v3
 import torchvision.utils as vutils
 
@@ -19,7 +18,7 @@ from GANs.models import GoodGenerator, GoodDiscriminator
 from GANs import ResNet32Generator, ResNet32Discriminator, \
     DC_generator, DC_discriminator
 from utils import prepare_parser
-from train_utils import get_data
+from utils.train_utils import get_data
 
 
 def transform(x):

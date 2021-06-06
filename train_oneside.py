@@ -1,19 +1,11 @@
-import os
-import csv
-import time
-import math
 import pandas as pd
 import torch
-import torch.nn as nn
-import torchvision.utils as vutils
 
-from torch.optim.sgd import SGD
 from torch.utils.data import DataLoader
 
-from optims import OCGD, BCGD2
-from train_utils import get_data, weights_init_d, weights_init_g, \
-    get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler, get_model
-from losses import get_loss
+from optims import OCGD
+from utils.train_utils import get_data, save_checkpoint, get_model
+from utils.losses import get_loss
 
 
 # seed = torch.randint(0, 1000000, (1,))

@@ -16,12 +16,12 @@ from torchvision import transforms, utils
 from tqdm import tqdm
 from GANs.styleganv2 import Generator, Discriminator
 from datas.dataset_utils import MultiResolutionDataset, data_sampler, sample_data
-from non_leaking import augment
-from losses import d_logistic_loss, d_r1_loss, g_nonsaturating_loss, g_path_regularize
+from utils.non_leaking import augment
+from utils.losses import d_logistic_loss, d_r1_loss, g_path_regularize
 
-from train_utils import requires_grad, accumulate, mixing_noise
-from utils import stylegan_parser
-from optims import ACGD, BCGD
+from utils.train_utils import accumulate, mixing_noise
+from utils.argparser import stylegan_parser
+from optims import ACGD
 
 
 def train(args, loader, generator, discriminator, optimizer, g_ema, device):

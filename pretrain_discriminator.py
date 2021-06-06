@@ -1,14 +1,11 @@
 import os
 import torch
 import torch.nn as nn
-from torch.optim import SGD, Adam
+from torch.optim import Adam
 from torch.utils.data import DataLoader
-import torchvision.models.resnet
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from GANs import GoodDiscriminator
-from train_utils import get_data
-
 
 data_transforms = {
     'train': transforms.Compose([

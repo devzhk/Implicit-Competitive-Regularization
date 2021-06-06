@@ -6,7 +6,7 @@ import torch
 from GANs.models import GoodGenerator, DC_generator
 from metrics.cifar10 import cal_inception_score, cal_fid_score
 from metrics.lsun_bedroom import cal_fid_score as lsun_fid_score
-from utils import eval_parser
+from utils.argparser import eval_parser
 
 
 class Evalor():

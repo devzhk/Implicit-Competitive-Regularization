@@ -8,9 +8,9 @@ import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 
 from optims import CNAG
-from losses import get_loss
-from utils import cgd_trainer
-from train_utils import get_data, get_model, save_checkpoint, weights_init_d, weights_init_g
+from utils.losses import get_loss
+from utils.argparser import cgd_trainer
+from utils.train_utils import get_data, get_model, save_checkpoint, weights_init_d, weights_init_g
 
 try:
     import wandb

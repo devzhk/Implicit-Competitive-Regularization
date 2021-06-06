@@ -1,4 +1,4 @@
-from train_utils import get_model
+from utils.train_utils import get_model
 import torch
 from ptflops import get_model_complexity_info
 

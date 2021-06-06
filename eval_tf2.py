@@ -22,7 +22,7 @@ import numpy as np
 from metrics.InceptionScore_tf2 import get_inception_score
 from GANs.models import GoodGenerator, DC_generator, dc_G
 from GANs import ResNet32Generator
-from utils import eval_parser
+from utils.argparser import eval_parser
 
 BATCH_SIZE = 100
 N_CHANNEL = 3

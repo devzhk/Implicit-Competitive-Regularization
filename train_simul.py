@@ -13,10 +13,10 @@ from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D
 from optims import ACGD, BCGD, CNAG
-from train_utils import get_data, weights_init_d, weights_init_g, \
-    get_diff, save_checkpoint, lr_scheduler, generate_data, icrScheduler, get_model
-from losses import get_loss
-from utils import cgd_trainer
+from utils.train_utils import get_data, weights_init_d, weights_init_g, \
+    get_diff, save_checkpoint, get_model
+from utils.losses import get_loss
+from utils.argparser import cgd_trainer
 
 try:
     import wandb

@@ -11,10 +11,10 @@ from torch.utils.data import DataLoader
 
 from GANs import dc_G, dc_D
 from optims import BCGD2
-from utils import train_seq_parser
-from train_utils import get_data, save_checkpoint, get_model, \
+from utils.argparser import train_seq_parser
+from utils.train_utils import get_data, save_checkpoint, get_model, \
     weights_init_d, weights_init_g, get_diff
-from losses import get_loss
+from utils.losses import get_loss
 
 
 seed = torch.randint(0, 1000000, (1,))

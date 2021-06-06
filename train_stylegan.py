@@ -19,16 +19,16 @@ except ImportError:
 
 from GANs.styleganv2 import Generator, Discriminator
 from datas.dataset_utils import MultiResolutionDataset, data_sampler, sample_data
-from distributed import (
+from utils.distributed import (
     get_rank,
     synchronize,
     reduce_loss_dict,
     reduce_sum,
     get_world_size,
 )
-from non_leaking import augment
-from losses import d_logistic_loss, d_r1_loss, g_nonsaturating_loss, g_path_regularize
-from train_utils import requires_grad, accumulate, mixing_noise
+from utils.non_leaking import augment
+from utils.losses import d_logistic_loss, d_r1_loss, g_nonsaturating_loss, g_path_regularize
+from utils.train_utils import requires_grad, accumulate, mixing_noise
 
 
 def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device):

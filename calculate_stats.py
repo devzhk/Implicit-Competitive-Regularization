@@ -8,11 +8,10 @@
  so as to reduce non-determinism. '''
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
-from tqdm import tqdm, trange
-from train_utils import get_data
+from tqdm import tqdm
+from utils.train_utils import get_data
 from metrics.is_biggan import calculate_inception_score, load_inception_net
 from argparse import ArgumentParser
 

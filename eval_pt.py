@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from GANs.models import GoodGenerator, DC_generator, dc_G
 from GANs.styleganv2 import Generator
 from GANs import ResNet32Generator, dcG32
-from utils import eval_parser
+from utils.argparser import eval_parser
 from metrics.is_biggan import load_inception_net, torch_calculate_frechet_distance, \
     torch_cov, numpy_calculate_frechet_distance
 

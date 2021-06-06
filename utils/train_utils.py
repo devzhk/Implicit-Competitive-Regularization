@@ -74,8 +74,8 @@ def generate_data(model_weight, path, z_dim=96, device='cpu'):
         fixed_real_d = fixed_D(real_set)
         fixed_fake_d = fixed_D(fake_set)
         fixed_vec = torch.cat([fixed_real_d, fixed_fake_d])
-    if not os.path.exists('figs/select'):
-        os.makedirs('figs/select')
+    if not os.path.exists('../figs/select'):
+        os.makedirs('../figs/select')
     torch.save({'real_set': real_set,
                 'fake_set': fake_set,
                 'real_d': fixed_real_d,
