@@ -1,37 +1,9 @@
-## Welcome to GitHub Pages
+# Stabilize GAN training
 
-You can use the [editor on GitHub](https://github.com/devzhk/Implicit-Competitive-Regularization/edit/gh-pages/index.md) to maintain and preview the content for your website in Markdown files.
+**Why it matters**: Generative Adversarial Networks (GANs) is one of the most successful deep generative models that has been widely applied in various areas. However, different from training other generative models, GANs update the generator and the discriminator in a minmax optimization form, which makes it more of an art than a science to train. Finding a stable GAN training algorithm remains a big challenge. 
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+**Related works**: In general, it is hard to come up with an algorithm that guarantees the global convergence because both discriminator and generator are non-convex functions of their parameters. But some progress has been made by simplifying the problem setting such as linear generator, Gaussian data. Aside from it, there are many papers proposing regularization techniques to stabilize training, which could fail badly in complex and multimodal domains. Another line of research propose to model GAN training from a game-theoretic perspective. These techniques yield training procedures that provably converge to some kind of approximate Nash equilibrium, but do so using unreasonably large resource constraints. 
 
-### Markdown
-
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
-
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [Basic writing and formatting syntax](https://docs.github.com/en/github/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/devzhk/Implicit-Competitive-Regularization/settings/pages). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://docs.github.com/categories/github-pages-basics/) or [contact support](https://support.github.com/contact) and we’ll help you sort it out.
+**What we have now**
+Our previous work provides empirical evidence of how GAN training can be stabilized by utilizing the interactions between discriminator and generator. [Implicit Competitive Regularization in GANs]([Implicit competitive regularization in GANs ICML 2020](https://proceedings.mlr.press/v119/schaefer20a.html))
+We' have developed a practical optimization algorithm - Adaptive Competitive Gradient Descent (ACGD). [Google Colab: train a GAN using ACGD](https://colab.research.google.com/drive/1-52aReaBAPNBtq2NcHxKkVIbdVXdyqtH?usp=sharing)
